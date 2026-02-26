@@ -1,0 +1,5 @@
+{
+  "name": "BSS-PMO",
+  "description": "A comprehensive PMO tool to generate Work Breakdown Structures (WBS), High-Level Designs (HLD), and Project Roadmaps from project requirement documents using Gemini AI.",
+  "requestFramePermissions": []
+}
