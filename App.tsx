@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import { generateProjectAssets } from './geminiService';
-import { ProjectAssets, AssetType, Activity, RiskItem, JiraConfig, HLDComponent, LLDComponent } from './types';
-import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView } from './components/AssetViews';
-import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo } from 'lucide-react';
+import { ProjectAssets, AssetType, Activity, RiskItem, HLDComponent, LLDComponent } from './types';
+import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView, ResourceDashboardView, ResourceProjectsView, DependencyView, ProjectResourcesView } from './components/AssetViews';
+import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo, Link2, Users } from 'lucide-react';
 
 // Dynamic imports
 import * as PDFJS from 'pdfjs-dist';
@@ -28,6 +28,7 @@ const App: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [isFileLoading, setIsFileLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<AssetType>('DASHBOARD');
+  const [sidebarView, setSidebarView] = useState<'dashboard' | 'projects' | 'resource_dashboard' | 'resource_projects'>('dashboard');
   const [error, setError] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
@@ -253,10 +254,10 @@ const App: React.FC = () => {
     // 5. Implementation Schedule
     if (type === 'FULL' || type === 'ACTIVITIES') {
       addTitle('5. Implementation Schedule');
-      const actData = assets.activities.map(a => [a.id, a.task, a.status, a.startDate, a.duration + ' Days', a.jiraKey || 'Not Synced']);
+      const actData = assets.activities.map(a => [a.id, a.task, a.status, a.startDate, a.duration + ' Days']);
       doc.autoTable({ 
         startY: currentY, 
-        head: [['Task ID', 'Activity Name', 'Execution Status', 'Target Start', 'Duration', 'Jira Ref']], 
+        head: [['Task ID', 'Activity Name', 'Execution Status', 'Target Start', 'Duration']], 
         body: actData, 
         headStyles: { fillColor: [79, 70, 229] },
         styles: { fontSize: 8 }
@@ -267,10 +268,14 @@ const App: React.FC = () => {
     // 6. Roadmap
     if (type === 'FULL' || type === 'ROADMAP') {
       addTitle('6. Strategic Roadmap');
-      const roadmapData = assets.roadmap.map(p => [p.phaseName, p.duration, p.milestones.join('\n')]);
+      const roadmapData = assets.roadmap.map(p => [
+        p.phaseName, 
+        p.duration, 
+        p.milestones.map(m => `• ${m.title}${m.dependency ? ` (Dep: ${m.dependency})` : ''}`).join('\n')
+      ]);
       doc.autoTable({ 
         startY: currentY, 
-        head: [['Phase', 'Estimated Duration', 'Key Milestones']], 
+        head: [['Phase', 'Estimated Duration', 'Key Milestones & Dependencies']], 
         body: roadmapData, 
         headStyles: { fillColor: [16, 185, 129] },
         styles: { fontSize: 8 }
@@ -278,9 +283,23 @@ const App: React.FC = () => {
       currentY = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // 7. Risk Log
+    // 7. Dependencies
+    if (type === 'FULL' || type === 'DEPENDENCIES') {
+      addTitle('7. Project Dependencies');
+      const depData = (assets.dependencies || []).map(d => [d.id, d.type, d.from, d.to]);
+      doc.autoTable({ 
+        startY: currentY, 
+        head: [['ID', 'Type', 'Source (Depends On)', 'Target (Impacted Item)']], 
+        body: depData, 
+        headStyles: { fillColor: [79, 70, 229] },
+        styles: { fontSize: 8 }
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    // 8. Risk Log
     if (type === 'FULL' || type === 'RISK_LOG') {
-      addTitle('7. Risk & Mitigation Log');
+      addTitle('8. Risk & Mitigation Log');
       const riskData = assets.riskLog.map(r => [r.id, r.category, r.description, r.impact, r.mitigation]);
       doc.autoTable({ 
         startY: currentY, 
@@ -292,9 +311,9 @@ const App: React.FC = () => {
       currentY = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // 8. Agile Backlog
+    // 9. Agile Backlog
     if (type === 'FULL' || type === 'BACKLOG') {
-      addTitle('8. Agile Product Backlog');
+      addTitle('9. Agile Product Backlog');
       const backlogData = (assets.backlog || []).map(b => [b.id, b.type, b.title, b.priority, b.status, b.estimate || '-']);
       doc.autoTable({ 
         startY: currentY, 
@@ -311,12 +330,20 @@ const App: React.FC = () => {
   };
 
   return (
-    <Layout>
+    <Layout 
+      activeView={sidebarView}
+      onViewChange={(view) => {
+        setSidebarView(view);
+        setStep('GLOBAL_DASHBOARD');
+        setCurrentProjectId(null);
+      }}
+    >
       <div className="max-w-6xl mx-auto space-y-8 pb-20">
         
-        {step === 'GLOBAL_DASHBOARD' && (
+        {step === 'GLOBAL_DASHBOARD' && sidebarView === 'dashboard' && (
           <GlobalDashboardView 
             projects={projects} 
+            viewMode="dashboard"
             onOpenProject={(id) => { setCurrentProjectId(id); setStep('RESULTS'); setActiveTab('DASHBOARD'); }}
             onDeleteProject={deleteProject}
             onToggleArchive={toggleArchiveProject}
@@ -324,11 +351,44 @@ const App: React.FC = () => {
           />
         )}
 
+        {step === 'GLOBAL_DASHBOARD' && sidebarView === 'projects' && (
+          <GlobalDashboardView 
+            projects={projects} 
+            viewMode="projects"
+            onOpenProject={(id) => { setCurrentProjectId(id); setStep('RESULTS'); setActiveTab('DASHBOARD'); }}
+            onDeleteProject={deleteProject}
+            onToggleArchive={toggleArchiveProject}
+            onNewProject={() => setStep('PROJECT_SETUP')}
+          />
+        )}
+
+        {step === 'GLOBAL_DASHBOARD' && sidebarView === 'resource_dashboard' && (
+          <ResourceDashboardView projects={projects} />
+        )}
+
+        {step === 'GLOBAL_DASHBOARD' && sidebarView === 'resource_projects' && (
+          <ResourceProjectsView 
+            projects={projects} 
+            onOpenProject={(id) => {
+              setCurrentProjectId(id);
+              setStep('RESULTS');
+              setActiveTab('RESOURCES');
+            }}
+          />
+        )}
+
         {step === 'PROJECT_SETUP' && (
           <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-8 text-center animate-in fade-in duration-500">
              <div className="space-y-4">
-                <div className="inline-flex p-4 bg-indigo-600 rounded-[32px] shadow-2xl shadow-indigo-100">
-                   <Rocket className="w-12 h-12 text-white" />
+                <div className="inline-flex p-4 bg-white rounded-[32px] shadow-2xl shadow-indigo-100 border border-slate-100">
+                   <img 
+                     src="/logo.svg" 
+                     alt="BSS-PMO Logo" 
+                     className="w-16 h-16 object-contain" 
+                     onError={(e) => {
+                       e.currentTarget.src = 'https://api.dicebear.com/7.x/initials/svg?seed=BSS&backgroundColor=4f46e5';
+                     }}
+                   />
                 </div>
                 <h1 className="text-4xl font-black text-slate-900">New <span className="text-indigo-600">Infrastructure</span></h1>
                 <p className="text-slate-500 max-w-md mx-auto">Ahmed, enter the project identity to begin architectural deconstruction.</p>
@@ -436,6 +496,8 @@ const App: React.FC = () => {
                   { id: 'LLD', icon: <Terminal className="w-5 h-5" />, label: 'LLD' },
                   { id: 'ACTIVITIES', icon: <TableProperties className="w-5 h-5" />, label: 'Schedule' },
                   { id: 'ROADMAP', icon: <Calendar className="w-5 h-5" />, label: 'Roadmap' },
+                  { id: 'DEPENDENCIES', icon: <Link2 className="w-5 h-5" />, label: 'Dependencies' },
+                  { id: 'RESOURCES', icon: <Users className="w-5 h-5" />, label: 'Resources' },
                   { id: 'RISK_LOG', icon: <ShieldAlert className="w-5 h-5" />, label: 'Risks' },
                 ].map(tab => (
                   <button 
@@ -453,9 +515,9 @@ const App: React.FC = () => {
                 {activeTab === 'DASHBOARD' && (
                   <DashboardView 
                     assets={currentProject} 
-                    onUpdateJira={(config) => updateCurrentProject({ jiraConfig: config })} 
                     onArchive={() => updateCurrentProject({ isArchived: true })}
                     onDownloadPDF={() => handleExportPDF('DASHBOARD')}
+                    onNavigate={(tab) => setActiveTab(tab)}
                   />
                 )}
                 {activeTab === 'BACKLOG' && (
@@ -472,11 +534,26 @@ const App: React.FC = () => {
                     onUpdateBacklog={(items) => updateCurrentProject({ backlog: items })} 
                   />
                 )}
-                {activeTab === 'WBS' && <WBSView items={currentProject.wbs} onDownloadPDF={() => handleExportPDF('WBS')} />}
+                {activeTab === 'WBS' && <WBSView items={currentProject.wbs} onUpdate={(items) => updateCurrentProject({ wbs: items })} onDownloadPDF={() => handleExportPDF('WBS')} />}
                 {activeTab === 'HLD' && <HLDView components={currentProject.hld} onUpdate={(comps) => updateCurrentProject({ hld: comps })} onDownloadPDF={() => handleExportPDF('HLD')} />}
                 {activeTab === 'LLD' && <LLDView components={currentProject.lld} onUpdate={(comps) => updateCurrentProject({ lld: comps })} onDownloadPDF={() => handleExportPDF('LLD')} />}
-                {activeTab === 'ACTIVITIES' && <ActivityTableView activities={currentProject.activities} jiraConfig={currentProject.jiraConfig} onUpdate={(a) => updateCurrentProject({ activities: a })} onDownloadPDF={() => handleExportPDF('ACTIVITIES')} />}
-                {activeTab === 'ROADMAP' && <RoadmapView phases={currentProject.roadmap} onDownloadPDF={() => handleExportPDF('ROADMAP')} />}
+                {activeTab === 'ACTIVITIES' && (
+                  <ActivityTableView 
+                    activities={currentProject.activities} 
+                    resources={currentProject.resources || []}
+                    onUpdate={(a) => updateCurrentProject({ activities: a })} 
+                    onDownloadPDF={() => handleExportPDF('ACTIVITIES')} 
+                  />
+                )}
+                {activeTab === 'ROADMAP' && <RoadmapView phases={currentProject.roadmap} onUpdate={(phases) => updateCurrentProject({ roadmap: phases })} onDownloadPDF={() => handleExportPDF('ROADMAP')} />}
+                {activeTab === 'DEPENDENCIES' && <DependencyView assets={currentProject} onUpdate={(deps) => updateCurrentProject({ dependencies: deps })} onDownloadPDF={() => handleExportPDF('DEPENDENCIES')} />}
+                {activeTab === 'RESOURCES' && (
+                  <ProjectResourcesView 
+                    resources={currentProject.resources || []} 
+                    activities={currentProject.activities || []}
+                    onUpdate={(resources) => updateCurrentProject({ resources })} 
+                  />
+                )}
                 {activeTab === 'RISK_LOG' && <RiskLogView risks={currentProject.riskLog} onUpdate={(r) => updateCurrentProject({ riskLog: r })} onDownloadPDF={() => handleExportPDF('RISK_LOG')} />}
               </div>
             </div>

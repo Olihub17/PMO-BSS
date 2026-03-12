@@ -24,10 +24,25 @@ export interface LLDComponent {
   approvedBy?: string;
 }
 
+export interface Milestone {
+  id: string;
+  title: string;
+  date?: string;
+  dependency?: string; // ID of another milestone or activity
+}
+
 export interface RoadmapPhase {
   phaseName: string;
   duration: string;
-  milestones: string[];
+  milestones: Milestone[];
+}
+
+export interface Resource {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  availability: number; // Percentage
 }
 
 export interface Activity {
@@ -38,7 +53,7 @@ export interface Activity {
   duration: number;
   dependency?: string;
   status: 'To Do' | 'In Progress' | 'Done';
-  jiraKey?: string;
+  assignedResources?: string[]; // IDs of resources
 }
 
 export interface RiskItem {
@@ -50,18 +65,12 @@ export interface RiskItem {
   dependency?: string;
 }
 
-export interface JiraConfig {
-  instanceUrl: string;
-  projectKey: string;
-  projectName?: string; // e.g., SHAB MOB
-  isConnected: boolean;
-  accountEmail?: string;
-}
-
 export interface BacklogItem {
   id: string;
   title: string;
   description: string;
+  objective?: string;
+  acceptanceCriteria?: string[];
   priority: 'Low' | 'Medium' | 'High' | 'Critical';
   status: 'Backlog' | 'Ready' | 'In Progress' | 'Done';
   estimate?: number; // Story points
@@ -94,9 +103,15 @@ export interface ProjectAssets {
   riskLog: RiskItem[];
   backlog: BacklogItem[];
   sprints: Sprint[];
+  resources: Resource[];
+  dependencies?: {
+    id: string;
+    from: string;
+    to: string;
+    type: 'Critical' | 'Technical' | 'Business';
+  }[];
   lastUpdated: string;
-  jiraConfig?: JiraConfig;
   isArchived?: boolean;
 }
 
-export type AssetType = 'DASHBOARD' | 'WBS' | 'HLD' | 'LLD' | 'ACTIVITIES' | 'ROADMAP' | 'RISK_LOG' | 'ARCHIVES' | 'BACKLOG' | 'SCRUM';
+export type AssetType = 'DASHBOARD' | 'WBS' | 'HLD' | 'LLD' | 'ACTIVITIES' | 'ROADMAP' | 'RISK_LOG' | 'ARCHIVES' | 'BACKLOG' | 'SCRUM' | 'DEPENDENCIES' | 'RESOURCES';

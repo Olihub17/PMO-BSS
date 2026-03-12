@@ -62,7 +62,19 @@ const ASSET_SCHEMA = {
         properties: {
           phaseName: { type: Type.STRING },
           duration: { type: Type.STRING },
-          milestones: { type: Type.ARRAY, items: { type: Type.STRING } }
+          milestones: { 
+            type: Type.ARRAY, 
+            items: { 
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                title: { type: Type.STRING },
+                date: { type: Type.STRING },
+                dependency: { type: Type.STRING, description: "ID of a previous milestone or activity this depends on" }
+              },
+              required: ["id", "title"]
+            } 
+          }
         },
         required: ["phaseName", "duration", "milestones"]
       }
@@ -78,7 +90,8 @@ const ASSET_SCHEMA = {
           endDate: { type: Type.STRING },
           duration: { type: Type.NUMBER },
           dependency: { type: Type.STRING },
-          status: { type: Type.STRING }
+          status: { type: Type.STRING },
+          assignedResources: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of resource IDs assigned to this task" }
         },
         required: ["id", "task", "startDate", "endDate", "duration", "status"]
       }
@@ -106,6 +119,8 @@ const ASSET_SCHEMA = {
           id: { type: Type.STRING },
           title: { type: Type.STRING },
           description: { type: Type.STRING },
+          objective: { type: Type.STRING, description: "The business objective or goal of this story" },
+          acceptanceCriteria: { type: Type.ARRAY, items: { type: Type.STRING }, description: "List of conditions that must be met for the story to be complete" },
           priority: { type: Type.STRING },
           status: { type: Type.STRING },
           estimate: { type: Type.NUMBER },
@@ -127,9 +142,23 @@ const ASSET_SCHEMA = {
         },
         required: ["id", "name", "startDate", "endDate", "status"]
       }
+    },
+    resources: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          name: { type: Type.STRING },
+          email: { type: Type.STRING },
+          role: { type: Type.STRING },
+          availability: { type: Type.NUMBER }
+        },
+        required: ["id", "name", "email", "role", "availability"]
+      }
     }
   },
-  required: ["metadata", "summary", "wbs", "hld", "lld", "roadmap", "activities", "riskLog", "backlog", "sprints"]
+  required: ["metadata", "summary", "wbs", "hld", "lld", "roadmap", "activities", "riskLog", "backlog", "sprints", "resources"]
 };
 
 export async function generateProjectAssets(projectName: string, content: string): Promise<ProjectAssets> {

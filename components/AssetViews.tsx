@@ -1,43 +1,136 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, JiraConfig } from '../types';
+import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType } from '../types';
 import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 
 // WBSView component
-export const WBSView: React.FC<{ items: WBSItem[], onDownloadPDF?: () => void }> = ({ items, onDownloadPDF }) => {
+export const WBSView: React.FC<{ 
+  items: WBSItem[], 
+  onUpdate: (items: WBSItem[]) => void,
+  onDownloadPDF?: () => void 
+}> = ({ items, onUpdate, onDownloadPDF }) => {
+  const handleCellEdit = (id: string, field: keyof WBSItem, value: any) => {
+    onUpdate(items.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleSubtaskEdit = (id: string, index: number, value: string) => {
+    onUpdate(items.map(item => {
+      if (item.id === id) {
+        const newSubtasks = [...(item.subtasks || [])];
+        newSubtasks[index] = value;
+        return { ...item, subtasks: newSubtasks };
+      }
+      return item;
+    }));
+  };
+
+  const addSubtask = (id: string) => {
+    onUpdate(items.map(item => {
+      if (item.id === id) {
+        return { ...item, subtasks: [...(item.subtasks || []), 'New Subtask'] };
+      }
+      return item;
+    }));
+  };
+
+  const removeSubtask = (id: string, index: number) => {
+    onUpdate(items.map(item => {
+      if (item.id === id) {
+        const newSubtasks = (item.subtasks || []).filter((_, i) => i !== index);
+        return { ...item, subtasks: newSubtasks };
+      }
+      return item;
+    }));
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-black text-slate-900">Work <span className="text-indigo-600">Breakdown</span></h2>
-        {onDownloadPDF && (
-          <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
-            <Download className="w-4 h-4" /> Export PDF
+        <div className="flex gap-2">
+          {onDownloadPDF && (
+            <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+              <Download className="w-4 h-4" /> Export PDF
+            </button>
+          )}
+          <button 
+            onClick={() => onUpdate([...items, { id: `WBS-${items.length + 1}`, reqId: `REQ-${items.length + 1}`, title: 'New Milestone', subtasks: [] }])}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" /> Add Milestone
           </button>
-        )}
+        </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {items.map((item) => (
-          <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all">
-            <div className="flex justify-between items-start mb-4">
-              <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl">
-                <LayoutList className="w-6 h-6" />
-              </div>
-              <span className="px-3 py-1 bg-slate-100 text-slate-500 rounded-full text-[10px] font-black uppercase tracking-widest">
-                {item.reqId}
-              </span>
-            </div>
-            <h3 className="text-xl font-bold text-slate-800 mb-4">{item.title}</h3>
-            <div className="space-y-2">
-              {item.subtasks?.map((sub, i) => (
-                <div key={i} className="flex items-center gap-3 text-sm text-slate-600 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
-                  <span>{sub}</span>
-                </div>
+
+      <div className="bg-white border border-slate-200 rounded-[32px] overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+              <tr>
+                <th className="px-6 py-5 border-b border-slate-100 w-24">Req ID</th>
+                <th className="px-6 py-5 border-b border-slate-100">Milestone / Component</th>
+                <th className="px-6 py-5 border-b border-slate-100">Specific Tasks</th>
+                <th className="px-6 py-5 border-b border-slate-100 text-right w-20">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {items.map((item) => (
+                <tr key={item.id} className="hover:bg-indigo-50/30 transition-colors group align-top">
+                  <td className="px-6 py-4">
+                    <input 
+                      className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+                      value={item.reqId}
+                      onChange={(e) => handleCellEdit(item.id, 'reqId', e.target.value)}
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <input 
+                      className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800"
+                      value={item.title}
+                      onChange={(e) => handleCellEdit(item.id, 'title', e.target.value)}
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-2">
+                      {item.subtasks?.map((sub, i) => (
+                        <div key={i} className="flex items-center gap-2 group/sub">
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 shrink-0"></div>
+                          <input 
+                            className="flex-1 bg-transparent border-none focus:ring-0 text-xs text-slate-600 p-0"
+                            value={sub}
+                            onChange={(e) => handleSubtaskEdit(item.id, i, e.target.value)}
+                          />
+                          <button 
+                            onClick={() => removeSubtask(item.id, i)}
+                            className="opacity-0 group-hover/sub:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-all"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      <button 
+                        onClick={() => addSubtask(item.id)}
+                        className="flex items-center gap-1 text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors mt-2"
+                      >
+                        <Plus className="w-3 h-3" /> Add Task
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => onUpdate(items.filter(i => i.id !== item.id))}
+                      className="p-2 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </td>
+                </tr>
               ))}
-            </div>
-          </div>
-        ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -47,6 +140,10 @@ export const WBSView: React.FC<{ items: WBSItem[], onDownloadPDF?: () => void }>
 export const RiskLogView: React.FC<{ risks: RiskItem[], onUpdate: (risks: RiskItem[]) => void, onDownloadPDF?: () => void }> = ({ risks, onUpdate, onDownloadPDF }) => {
   const handleDelete = (id: string) => {
     onUpdate(risks.filter(r => r.id !== id));
+  };
+
+  const handleCellEdit = (id: string, field: keyof RiskItem, value: any) => {
+    onUpdate(risks.map(r => r.id === id ? { ...r, [field]: value } : r));
   };
 
   const getImpactColor = (impact: string) => {
@@ -85,13 +182,40 @@ export const RiskLogView: React.FC<{ risks: RiskItem[], onUpdate: (risks: RiskIt
             <div className="flex-1 space-y-2">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{risk.id}</span>
-                <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase">{risk.category}</span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${getImpactColor(risk.impact)}`}>{risk.impact} Impact</span>
+                <select 
+                  className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase border-none focus:ring-0"
+                  value={risk.category}
+                  onChange={(e) => handleCellEdit(risk.id, 'category', e.target.value)}
+                >
+                  <option value="Technical">Technical</option>
+                  <option value="Regulatory">Regulatory</option>
+                  <option value="Operational">Operational</option>
+                </select>
+                <select 
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border focus:ring-0 ${getImpactColor(risk.impact)}`}
+                  value={risk.impact}
+                  onChange={(e) => handleCellEdit(risk.id, 'impact', e.target.value)}
+                >
+                  <option value="Low">Low Impact</option>
+                  <option value="Medium">Medium Impact</option>
+                  <option value="High">High Impact</option>
+                </select>
               </div>
-              <h4 className="font-bold text-slate-800">{risk.description}</h4>
+              <input 
+                className="w-full font-bold text-slate-800 bg-transparent border-none focus:ring-0 p-0"
+                value={risk.description}
+                onChange={(e) => handleCellEdit(risk.id, 'description', e.target.value)}
+              />
               <div className="flex items-start gap-2 p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
                  <span className="shrink-0 mt-0.5 text-amber-600"><Info className="w-4 h-4" /></span>
-                 <p className="text-xs text-amber-800"><strong>Mitigation:</strong> {risk.mitigation}</p>
+                 <div className="flex-1 flex items-center gap-2">
+                   <strong className="text-xs text-amber-800 shrink-0">Mitigation:</strong>
+                   <input 
+                     className="w-full text-xs text-amber-800 bg-transparent border-none focus:ring-0 p-0"
+                     value={risk.mitigation}
+                     onChange={(e) => handleCellEdit(risk.id, 'mitigation', e.target.value)}
+                   />
+                 </div>
               </div>
             </div>
             <button onClick={() => handleDelete(risk.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors">
@@ -109,8 +233,9 @@ export const GlobalDashboardView: React.FC<{
   onOpenProject: (id: string) => void, 
   onDeleteProject: (id: string, e: React.MouseEvent) => void, 
   onToggleArchive: (id: string, e: React.MouseEvent) => void,
-  onNewProject: () => void 
-}> = ({ projects, onOpenProject, onDeleteProject, onToggleArchive, onNewProject }) => {
+  onNewProject: () => void,
+  viewMode?: 'dashboard' | 'projects'
+}> = ({ projects, onOpenProject, onDeleteProject, onToggleArchive, onNewProject, viewMode = 'dashboard' }) => {
   const activeProjects = projects.filter(p => !p.isArchived);
   const archivedProjects = projects.filter(p => p.isArchived);
   
@@ -125,8 +250,15 @@ export const GlobalDashboardView: React.FC<{
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div className="space-y-2">
-          <h1 className="text-4xl font-black text-slate-900">Portfolio <span className="text-indigo-600">Overview</span></h1>
-          <p className="text-slate-500">Enterprise intelligence hub for BSS-PMO</p>
+          <h1 className="text-4xl font-black text-slate-900">
+            {viewMode === 'dashboard' ? 'Portfolio ' : 'Project '} 
+            <span className="text-indigo-600">{viewMode === 'dashboard' ? 'Overview' : 'Inventory'}</span>
+          </h1>
+          <p className="text-slate-500">
+            {viewMode === 'dashboard' 
+              ? 'Enterprise intelligence hub for BSS-PMO' 
+              : 'Manage and access all your architectural deconstructions'}
+          </p>
         </div>
         <button 
           onClick={onNewProject}
@@ -137,45 +269,51 @@ export const GlobalDashboardView: React.FC<{
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl"><Briefcase className="w-6 h-6" /></div>
-          <div>
-            <div className="text-2xl font-black text-slate-800">{activeProjects.length}</div>
-            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Active</div>
+      {viewMode === 'dashboard' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl"><Briefcase className="w-6 h-6" /></div>
+            <div>
+              <div className="text-2xl font-black text-slate-800">{activeProjects.length}</div>
+              <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Active</div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><BarChart3 className="w-6 h-6" /></div>
+            <div>
+              <div className="text-2xl font-black text-slate-800">{avgProgress}%</div>
+              <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Completion</div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl"><Archive className="w-6 h-6" /></div>
+            <div>
+              <div className="text-2xl font-black text-slate-800">{archivedProjects.length}</div>
+              <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Archives</div>
+            </div>
+          </div>
+          <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+            <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><ShieldAlert className="w-6 h-6" /></div>
+            <div>
+              <div className="text-2xl font-black text-slate-800">{totalRisks}</div>
+              <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Risks</div>
+            </div>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><BarChart3 className="w-6 h-6" /></div>
-          <div>
-            <div className="text-2xl font-black text-slate-800">{avgProgress}%</div>
-            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Completion</div>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl"><Archive className="w-6 h-6" /></div>
-          <div>
-            <div className="text-2xl font-black text-slate-800">{archivedProjects.length}</div>
-            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Archives</div>
-          </div>
-        </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="p-4 bg-red-50 text-red-600 rounded-2xl"><ShieldAlert className="w-6 h-6" /></div>
-          <div>
-            <div className="text-2xl font-black text-slate-800">{totalRisks}</div>
-            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Risks</div>
-          </div>
-        </div>
-      </div>
+      )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
+      <div className={`grid grid-cols-1 ${viewMode === 'dashboard' ? 'lg:grid-cols-3' : ''} gap-8`}>
+        <div className={`${viewMode === 'dashboard' ? 'lg:col-span-2' : ''} space-y-8`}>
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
              <div className="flex justify-between items-center mb-6">
                 <h3 className="font-bold text-slate-800 text-xl flex items-center gap-2"><FolderOpen className="w-6 h-6 text-indigo-600" />Active Projects</h3>
              </div>
              <div className="space-y-4">
-                {activeProjects.map(p => (
+                {activeProjects.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-slate-400 font-medium">No active projects found. Start by initializing a new one.</p>
+                  </div>
+                ) : activeProjects.map(p => (
                   <ProjectCard key={p.id} project={p} onClick={() => onOpenProject(p.id)} onDelete={onDeleteProject} onToggleArchive={onToggleArchive} />
                 ))}
              </div>
@@ -195,12 +333,14 @@ export const GlobalDashboardView: React.FC<{
           )}
         </div>
 
-        <div className="space-y-6">
-           <div className="bg-slate-900 p-8 rounded-3xl text-white">
-              <h3 className="font-bold text-lg mb-4">Portfolio Strategy</h3>
-              <p className="text-slate-400 text-sm italic">"Ahmed, your BSS-PMO platform currently monitors {totalProjects} projects. Ensure HLD/LLD approvals are finalized before moving critical infrastructure to archives."</p>
-           </div>
-        </div>
+        {viewMode === 'dashboard' && (
+          <div className="space-y-6">
+             <div className="bg-slate-900 p-8 rounded-3xl text-white">
+                <h3 className="font-bold text-lg mb-4">Portfolio Strategy</h3>
+                <p className="text-slate-400 text-sm italic">"Ahmed, your BSS-PMO platform currently monitors {totalProjects} projects. Ensure HLD/LLD approvals are finalized before moving critical infrastructure to archives."</p>
+             </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -385,16 +525,28 @@ export const LLDView: React.FC<{ components: LLDComponent[], onUpdate: (comps: L
 
 export const ActivityTableView: React.FC<{ 
   activities: Activity[], 
-  jiraConfig?: JiraConfig,
+  resources?: Resource[],
   onUpdate: (activities: Activity[]) => void,
   onDownloadPDF?: () => void
-}> = ({ activities, jiraConfig, onUpdate, onDownloadPDF }) => {
-  const [syncingId, setSyncingId] = useState<string | null>(null);
-  const [isFetchingJira, setIsFetchingJira] = useState(false);
+}> = ({ activities, resources = [], onUpdate, onDownloadPDF }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showResourcePicker, setShowResourcePicker] = useState<string | null>(null);
 
   const handleCellEdit = (id: string, field: keyof Activity, value: any) => {
     onUpdate(activities.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const toggleResource = (activityId: string, resourceId: string) => {
+    onUpdate(activities.map(a => {
+      if (a.id === activityId) {
+        const assigned = a.assignedResources || [];
+        const newAssigned = assigned.includes(resourceId)
+          ? assigned.filter(id => id !== resourceId)
+          : [...assigned, resourceId];
+        return { ...a, assignedResources: newAssigned };
+      }
+      return a;
+    }));
   };
 
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -421,32 +573,6 @@ export const ActivityTableView: React.FC<{
     reader.readAsBinaryString(file);
   };
 
-  const handleJiraSync = (id: string) => {
-    if (!jiraConfig?.isConnected) return;
-    setSyncingId(id);
-    // Simulate API push to Jira Cloud
-    setTimeout(() => {
-      const jiraKey = `${jiraConfig.projectKey}-${Math.floor(100 + Math.random() * 900)}`;
-      handleCellEdit(id, 'jiraKey', jiraKey);
-      setSyncingId(null);
-    }, 1200);
-  };
-
-  const handleFetchSHABMOB = () => {
-    setIsFetchingJira(true);
-    // Simulate fetching from SHAB MOB project for Ahmed Nabil
-    setTimeout(() => {
-      const mockJiraIssues: Activity[] = [
-        { id: 'SM-101', task: '[SHAB MOB] Provisioning Engine Refactoring', startDate: '2025-04-01', endDate: '2025-04-10', duration: 10, status: 'In Progress', jiraKey: 'SM-101' },
-        { id: 'SM-102', task: '[SHAB MOB] Real-time Balance Sync - KYC Validation', startDate: '2025-04-05', endDate: '2025-04-15', duration: 10, status: 'To Do', jiraKey: 'SM-102' },
-        { id: 'SM-103', task: '[SHAB MOB] SIM Lifecycle Webhook Implementation', startDate: '2025-03-25', endDate: '2025-03-30', duration: 5, status: 'Done', jiraKey: 'SM-103' },
-      ];
-      // Append and notify
-      onUpdate([...activities, ...mockJiraIssues]);
-      setIsFetchingJira(false);
-    }, 2000);
-  };
-
   return (
     <div className="space-y-4 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
@@ -469,15 +595,6 @@ export const ActivityTableView: React.FC<{
           <div className="flex flex-wrap gap-2">
             <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleExcelUpload} />
             
-            <button 
-              onClick={handleFetchSHABMOB}
-              disabled={isFetchingJira}
-              className="flex items-center gap-2 px-5 py-3 bg-sky-600 text-white rounded-2xl font-black text-xs shadow-lg shadow-sky-100 hover:bg-sky-700 transition-all disabled:opacity-50"
-            >
-              {isFetchingJira ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DownloadCloud className="w-4 h-4" />}
-              {isFetchingJira ? 'Syncing SHAB MOB...' : 'Import from SHAB MOB'}
-            </button>
-
             <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 rounded-2xl font-black text-xs border border-indigo-100 hover:bg-indigo-50 transition-all shadow-sm">
               <FileUp className="w-4 h-4" /> Import Excel
             </button>
@@ -495,15 +612,14 @@ export const ActivityTableView: React.FC<{
               <th className="px-6 py-5 border-b border-slate-100">Activity Detail</th>
               <th className="px-6 py-5 border-b border-slate-100">Execution Status</th>
               <th className="px-6 py-5 border-b border-slate-100">Timeline</th>
-              <th className="px-6 py-5 border-b border-slate-100">Jira Integration</th>
               <th className="px-6 py-5 border-b border-slate-100">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {activities.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-20 text-center text-slate-300 font-bold italic">
-                  No activities detected. Import from Excel or SHAB MOB to begin.
+                <td colSpan={5} className="px-6 py-20 text-center text-slate-300 font-bold italic">
+                  No activities detected. Import from Excel to begin.
                 </td>
               </tr>
             ) : activities.map((act) => (
@@ -545,20 +661,54 @@ export const ActivityTableView: React.FC<{
                    </div>
                 </td>
                 <td className="px-6 py-4">
-                  {act.jiraKey ? (
-                    <div className="flex items-center gap-2 text-[10px] font-black text-sky-600 bg-sky-50 px-3 py-2 rounded-xl border border-sky-100 w-fit animate-in slide-in-from-right-2">
-                      <Database className="w-3 h-3" /> {act.jiraKey}
-                      <ExternalLink className="w-2.5 h-2.5 opacity-50" />
-                    </div>
-                  ) : (
+                  <div className="relative">
                     <button 
-                      onClick={() => handleJiraSync(act.id)}
-                      disabled={syncingId === act.id}
-                      className="text-[10px] font-black text-slate-400 hover:text-sky-600 transition-all flex items-center gap-2 uppercase tracking-tighter bg-slate-50 hover:bg-white border border-transparent hover:border-sky-100 px-3 py-2 rounded-xl"
+                      onClick={() => setShowResourcePicker(showResourcePicker === act.id ? null : act.id)}
+                      className="flex -space-x-2 hover:opacity-80 transition-opacity"
                     >
-                      {syncingId === act.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Share2 className="w-3 h-3" />} Push to Cloud
+                      {(act.assignedResources || []).length > 0 ? (
+                        act.assignedResources?.map(rId => {
+                          const res = resources.find(r => r.id === rId);
+                          return (
+                            <div key={rId} className="w-6 h-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-indigo-600" title={res?.name || 'Unknown'}>
+                              {res?.name?.split(' ').map(n => n[0]).join('') || '?'}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] text-slate-400">
+                          <Plus className="w-3 h-3" />
+                        </div>
+                      )}
                     </button>
-                  )}
+
+                    {showResourcePicker === act.id && (
+                      <div className="absolute bottom-full left-0 mb-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-2 mb-2">Assign Resources</div>
+                        <div className="max-h-40 overflow-y-auto space-y-1">
+                          {resources.length === 0 ? (
+                            <div className="text-[10px] text-slate-400 p-2 italic">No resources defined.</div>
+                          ) : resources.map(res => (
+                            <button 
+                              key={res.id}
+                              onClick={() => toggleResource(act.id, res.id)}
+                              className={`w-full flex items-center justify-between p-2 rounded-lg text-left transition-colors ${
+                                (act.assignedResources || []).includes(res.id) ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-slate-50 text-slate-600'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-indigo-100 flex items-center justify-center text-[8px] font-black">
+                                  {res.name.split(' ').map(n => n[0]).join('')}
+                                </div>
+                                <span className="text-[10px] font-bold truncate">{res.name}</span>
+                              </div>
+                              {(act.assignedResources || []).includes(res.id) && <CheckCircle2 className="w-3 h-3" />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4">
                   <button onClick={() => onUpdate(activities.filter(a => a.id !== act.id))} className="p-2 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
@@ -576,89 +726,271 @@ export const ActivityTableView: React.FC<{
   );
 };
 
-export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onDownloadPDF?: () => void }> = ({ phases, onDownloadPDF }) => (
-  <div className="space-y-8 animate-in fade-in duration-500">
-    <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-black text-slate-900">Strategic <span className="text-emerald-600">Roadmap</span></h2>
-      {onDownloadPDF && (
-        <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
-          <Download className="w-4 h-4" /> Export PDF
-        </button>
-      )}
-    </div>
-    <div className="relative pl-8 md:pl-0">
-      <div className="hidden md:block absolute left-1/2 transform -translate-x-1/2 w-1 h-full bg-slate-200 rounded-full"></div>
-      <div className="md:hidden absolute left-4 w-1 h-full bg-slate-200 rounded-full"></div>
+export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: RoadmapPhase[]) => void, onDownloadPDF?: () => void }> = ({ phases, onUpdate, onDownloadPDF }) => {
+  const handleCellEdit = (index: number, field: keyof RoadmapPhase, value: any) => {
+    const newPhases = [...phases];
+    newPhases[index] = { ...newPhases[index], [field]: value };
+    onUpdate(newPhases);
+  };
 
-      <div className="space-y-12 relative">
-        {phases.map((phase, idx) => (
-          <div key={idx} className={`relative flex flex-col md:flex-row items-center ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}>
-            <div className="absolute left-[-22px] md:left-1/2 md:transform md:-translate-x-1/2 w-10 h-10 rounded-full bg-white border-4 border-indigo-600 z-10 flex items-center justify-center shadow-lg">
-               <span className="text-indigo-600 font-black text-sm">{idx + 1}</span>
-            </div>
+  const handleMilestoneEdit = (phaseIdx: number, msIdx: number, field: keyof Milestone, value: string) => {
+    const newPhases = [...phases];
+    const newMilestones = [...newPhases[phaseIdx].milestones];
+    newMilestones[msIdx] = { ...newMilestones[msIdx], [field]: value };
+    newPhases[phaseIdx] = { ...newPhases[phaseIdx], milestones: newMilestones };
+    onUpdate(newPhases);
+  };
 
-            <div className={`w-full md:w-5/12 ${idx % 2 === 0 ? 'md:pl-12' : 'md:pr-12'}`}>
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all hover:-translate-y-1 group">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2">
-                    <Calendar className="w-3 h-3" />
-                    {phase.duration}
+  const addPhase = () => {
+    onUpdate([...phases, { phaseName: 'New Phase', duration: 'TBD', milestones: [{ id: `MS-${Date.now()}`, title: 'New Milestone' }] }]);
+  };
+
+  const addMilestone = (phaseIdx: number) => {
+    const newPhases = [...phases];
+    newPhases[phaseIdx] = { 
+      ...newPhases[phaseIdx], 
+      milestones: [...newPhases[phaseIdx].milestones, { id: `MS-${Date.now()}`, title: 'New Milestone' }] 
+    };
+    onUpdate(newPhases);
+  };
+
+  const removeMilestone = (phaseIdx: number, msIdx: number) => {
+    const newPhases = [...phases];
+    newPhases[phaseIdx] = { ...newPhases[phaseIdx], milestones: newPhases[phaseIdx].milestones.filter((_, i) => i !== msIdx) };
+    onUpdate(newPhases);
+  };
+
+  const removePhase = (index: number) => {
+    onUpdate(phases.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-slate-900">Strategic <span className="text-emerald-600">Roadmap</span></h2>
+        <div className="flex gap-2">
+          {onDownloadPDF && (
+            <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+              <Download className="w-4 h-4" /> Export PDF
+            </button>
+          )}
+          <button 
+            onClick={addPhase}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800"
+          >
+            <Plus className="w-4 h-4" /> Add Phase
+          </button>
+        </div>
+      </div>
+      <div className="relative pl-8 md:pl-0">
+        <div className="hidden md:block absolute left-1/2 transform -translate-x-1/2 w-1 h-full bg-slate-200 rounded-full"></div>
+        <div className="md:hidden absolute left-4 w-1 h-full bg-slate-200 rounded-full"></div>
+  
+        <div className="space-y-12 relative">
+          {phases.map((phase, idx) => (
+            <div key={idx} className={`relative flex flex-col md:flex-row items-center ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}>
+              <div className="absolute left-[-22px] md:left-1/2 md:transform md:-translate-x-1/2 w-10 h-10 rounded-full bg-white border-4 border-indigo-600 z-10 flex items-center justify-center shadow-lg">
+                 <span className="text-indigo-600 font-black text-sm">{idx + 1}</span>
+              </div>
+  
+              <div className={`w-full md:w-5/12 ${idx % 2 === 0 ? 'md:pl-12' : 'md:pr-12'}`}>
+                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group relative">
+                  <button 
+                    onClick={() => removePhase(idx)}
+                    className="absolute top-4 right-4 p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2">
+                      <Calendar className="w-3 h-3" />
+                      <input 
+                        className="bg-transparent border-none focus:ring-0 p-0 text-xs font-bold w-20"
+                        value={phase.duration}
+                        onChange={(e) => handleCellEdit(idx, 'duration', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <input 
+                    className="w-full text-xl font-bold text-slate-800 mb-4 bg-transparent border-none focus:ring-0 p-0 group-hover:text-indigo-600 transition-colors"
+                    value={phase.phaseName}
+                    onChange={(e) => handleCellEdit(idx, 'phaseName', e.target.value)}
+                  />
+                  <div className="space-y-3">
+                    {phase.milestones.map((ms, mIdx) => (
+                      <div key={mIdx} className="space-y-1 group/ms">
+                        <div className="flex items-center gap-3 text-sm text-slate-600 p-2 rounded-lg bg-slate-50 border border-transparent hover:border-slate-200 transition-colors">
+                          <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
+                          <div className="flex-1 flex flex-col">
+                            <input 
+                              className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-slate-800"
+                              value={ms.title}
+                              onChange={(e) => handleMilestoneEdit(idx, mIdx, 'title', e.target.value)}
+                            />
+                            <div className="flex items-center gap-2 mt-1">
+                              <Link2 className="w-3 h-3 text-slate-400" />
+                              <input 
+                                className="bg-transparent border-none focus:ring-0 p-0 text-[10px] text-slate-400 font-mono"
+                                placeholder="Dependency ID..."
+                                value={ms.dependency || ''}
+                                onChange={(e) => handleMilestoneEdit(idx, mIdx, 'dependency', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <button 
+                            onClick={() => removeMilestone(idx, mIdx)}
+                            className="opacity-0 group-hover/ms:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        {ms.dependency && (
+                          <div className="ml-9 flex items-center gap-2">
+                            <div className="w-px h-3 bg-slate-200"></div>
+                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                              Depends on: {ms.dependency}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <button 
+                      onClick={() => addMilestone(idx)}
+                      className="flex items-center gap-2 text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-4 hover:text-indigo-700"
+                    >
+                      <Plus className="w-3 h-3" /> Add Milestone
+                    </button>
                   </div>
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-4 group-hover:text-indigo-600 transition-colors">{phase.phaseName}</h3>
-                <div className="space-y-2">
-                  {phase.milestones.map((ms, mIdx) => (
-                    <div key={mIdx} className="flex items-center gap-3 text-sm text-slate-600 p-2 rounded-lg bg-slate-50 border border-transparent hover:border-slate-200 transition-colors">
-                      <CheckCircle className="w-4 h-4 text-emerald-500" />
-                      <span>{ms}</span>
-                    </div>
-                  ))}
-                </div>
+              </div>
+              <div className="hidden md:block w-5/12"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const DependencyView: React.FC<{ 
+  assets: ProjectAssets,
+  onUpdate: (deps: any[]) => void,
+  onDownloadPDF?: () => void 
+}> = ({ assets, onUpdate, onDownloadPDF }) => {
+  const dependencies = assets.dependencies || [];
+
+  const handleAdd = () => {
+    onUpdate([...dependencies, { id: `DEP-${Date.now()}`, from: '', to: '', type: 'Technical' }]);
+  };
+
+  const handleEdit = (index: number, field: string, value: string) => {
+    const newDeps = [...dependencies];
+    newDeps[index] = { ...newDeps[index], [field]: value };
+    onUpdate(newDeps);
+  };
+
+  const handleRemove = (index: number) => {
+    onUpdate(dependencies.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-slate-900">Project <span className="text-indigo-600">Dependencies</span></h2>
+        <div className="flex gap-2">
+          {onDownloadPDF && (
+            <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
+              <Download className="w-4 h-4" /> Export PDF
+            </button>
+          )}
+          <button 
+            onClick={handleAdd}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800"
+          >
+            <Plus className="w-4 h-4" /> Add Dependency
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {dependencies.map((dep, idx) => (
+          <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group relative">
+            <button 
+              onClick={() => handleRemove(idx)}
+              className="absolute top-4 right-4 p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 bg-indigo-50 rounded-lg">
+                <Link2 className="w-4 h-4 text-indigo-600" />
+              </div>
+              <select 
+                className="bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-indigo-600 uppercase tracking-widest"
+                value={dep.type}
+                onChange={(e) => handleEdit(idx, 'type', e.target.value)}
+              >
+                <option value="Critical">Critical</option>
+                <option value="Technical">Technical</option>
+                <option value="Business">Business</option>
+              </select>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Source (Depends On)</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="e.g. API Readiness"
+                  value={dep.from}
+                  onChange={(e) => handleEdit(idx, 'from', e.target.value)}
+                />
+              </div>
+              <div className="flex justify-center">
+                <ArrowRight className="w-4 h-4 text-slate-300" />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Target (Impacted Item)</label>
+                <input 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                  placeholder="e.g. UI Integration"
+                  value={dep.to}
+                  onChange={(e) => handleEdit(idx, 'to', e.target.value)}
+                />
               </div>
             </div>
-            <div className="hidden md:block w-5/12"></div>
           </div>
         ))}
       </div>
+
+      {dependencies.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+          <Link2 className="w-12 h-12 text-slate-300 mb-4" />
+          <p className="text-slate-500 font-medium">No dependencies defined yet.</p>
+          <button 
+            onClick={handleAdd}
+            className="mt-4 text-indigo-600 font-bold text-sm hover:underline"
+          >
+            Click here to add your first dependency
+          </button>
+        </div>
+      )}
     </div>
-  </div>
-);
+  );
+};
 
 export const DashboardView: React.FC<{ 
   assets: ProjectAssets,
-  onUpdateJira: (config: JiraConfig) => void,
   onArchive: () => void,
-  onDownloadPDF?: () => void
-}> = ({ assets, onUpdateJira, onArchive, onDownloadPDF }) => {
-  const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
-  const [jiraUrl, setJiraUrl] = useState(assets.jiraConfig?.instanceUrl || 'https://bssconnects.atlassian.net');
-  const [jiraKey, setJiraKey] = useState(assets.jiraConfig?.projectKey || 'SHAB');
-  const [jiraProjectName, setJiraProjectName] = useState(assets.jiraConfig?.projectName || 'SHAB MOB');
-
+  onDownloadPDF?: () => void,
+  onNavigate?: (tab: AssetType) => void
+}> = ({ assets, onArchive, onDownloadPDF, onNavigate }) => {
   const totalTasks = assets.activities.length;
   const completedTasks = assets.activities.filter(a => a.status === 'Done').length;
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   
   const allHldApproved = assets.hld.length > 0 && assets.hld.every(h => h.isApproved);
   const allLldApproved = assets.lld.length > 0 && assets.lld.every(l => l.isApproved);
-
-  const handleConnectJira = () => {
-    onUpdateJira({
-      instanceUrl: jiraUrl,
-      projectKey: jiraKey,
-      projectName: jiraProjectName,
-      isConnected: true,
-      accountEmail: 'Ahmed.nabil@bssconnects.com'
-    });
-    setIsJiraModalOpen(false);
-  };
-
-  // Auto-connect if not set (for demo purposes based on user request)
-  useEffect(() => {
-    if (!assets.jiraConfig?.isConnected) {
-        handleConnectJira();
-    }
-  }, []);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
@@ -671,22 +1003,34 @@ export const DashboardView: React.FC<{
         )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div 
+          onClick={() => onNavigate?.('WBS')}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-300 transition-all"
+        >
            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl w-fit mb-4"><LayoutList className="w-6 h-6" /></div>
            <div className="text-2xl font-black text-slate-800">{assets.wbs.length}</div>
            <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">WBS Streams</div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div 
+          onClick={() => onNavigate?.('HLD')}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-blue-300 transition-all"
+        >
            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl w-fit mb-4"><Cpu className="w-6 h-6" /></div>
            <div className="text-2xl font-black text-slate-800">{assets.hld.length}</div>
            <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">HLD Blocks</div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div 
+          onClick={() => onNavigate?.('RISK_LOG')}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-amber-300 transition-all"
+        >
            <div className="p-3 bg-amber-50 text-amber-600 rounded-xl w-fit mb-4"><AlertTriangle className="w-6 h-6" /></div>
            <div className="text-2xl font-black text-slate-800">{assets.riskLog.length}</div>
            <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Active Risks</div>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div 
+          onClick={() => onNavigate?.('ROADMAP')}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-emerald-300 transition-all"
+        >
            <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl w-fit mb-4"><Clock className="w-6 h-6" /></div>
            <div className="text-2xl font-black text-slate-800">{assets.roadmap.length}</div>
            <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Phases</div>
@@ -695,7 +1039,10 @@ export const DashboardView: React.FC<{
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+          <div 
+            onClick={() => onNavigate?.('ACTIVITIES')}
+            className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-300 transition-all"
+          >
             <h3 className="font-black text-slate-800 text-xl mb-6 flex items-center justify-between">
               <span className="flex items-center gap-2"><BarChart3 className="w-6 h-6 text-indigo-600" />Project Pulse</span>
               <span className="text-indigo-600 font-black text-2xl">{progressPercent}%</span>
@@ -715,6 +1062,38 @@ export const DashboardView: React.FC<{
               <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-center">
                  <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Gov Review</div>
                  <div className="text-xl font-black text-blue-800">{allHldApproved && allLldApproved ? 'Verified' : 'Pending'}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                Top WBS Streams
+                <button onClick={() => onNavigate?.('WBS')} className="text-indigo-600 hover:underline">View All</button>
+              </h4>
+              <div className="space-y-3">
+                {assets.wbs.slice(0, 3).map(item => (
+                  <div key={item.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="w-2 h-2 rounded-full bg-indigo-400"></div>
+                    <span className="text-xs font-bold text-slate-700 truncate">{item.title}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                Critical Risks
+                <button onClick={() => onNavigate?.('RISK_LOG')} className="text-indigo-600 hover:underline">View All</button>
+              </h4>
+              <div className="space-y-3">
+                {assets.riskLog.slice(0, 3).map(risk => (
+                  <div key={risk.id} className="flex items-center gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
+                    <ShieldAlert className="w-4 h-4 text-red-600" />
+                    <span className="text-xs font-bold text-red-700 truncate">{risk.description}</span>
+                  </div>
+                ))}
+                {assets.riskLog.length === 0 && <p className="text-xs text-slate-400 italic">No risks identified.</p>}
               </div>
             </div>
           </div>
@@ -745,31 +1124,6 @@ export const DashboardView: React.FC<{
         </div>
 
         <div className="space-y-6">
-          <div className={`p-8 rounded-[40px] border transition-all ${assets.jiraConfig?.isConnected ? 'bg-sky-600 border-sky-500 text-white shadow-2xl shadow-sky-900/20' : 'bg-white border-slate-200 text-slate-800'}`}>
-            <div className="flex justify-between items-start mb-6">
-               <div className={`p-4 rounded-2xl ${assets.jiraConfig?.isConnected ? 'bg-white/20' : 'bg-sky-50'}`}>
-                 <Share2 className={`w-8 h-8 ${assets.jiraConfig?.isConnected ? 'text-white' : 'text-sky-600'}`} />
-               </div>
-               {assets.jiraConfig?.isConnected && (
-                 <div className="flex items-center gap-2 bg-emerald-500/20 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-tighter">
-                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-400"></div> Online
-                 </div>
-               )}
-            </div>
-            <h3 className="font-black text-2xl mb-2">Jira Bridge</h3>
-            <p className={`text-sm mb-8 leading-relaxed ${assets.jiraConfig?.isConnected ? 'text-sky-100' : 'text-slate-500'}`}>
-              {assets.jiraConfig?.isConnected 
-                ? `Mapped to ${assets.jiraConfig.accountEmail} • Project: ${assets.jiraConfig.projectName}`
-                : "Synchronize your architectural tasks with the global BSSconnects Jira instance."}
-            </p>
-            <button 
-              onClick={() => setIsJiraModalOpen(true)}
-              className={`w-full py-4 rounded-[20px] font-black text-xs uppercase tracking-widest transition-all shadow-lg ${assets.jiraConfig?.isConnected ? 'bg-white text-sky-600 hover:bg-sky-50' : 'bg-sky-600 text-white hover:bg-sky-700 shadow-sky-100'}`}
-            >
-              {assets.jiraConfig?.isConnected ? "Connection Details" : "Establish Link"}
-            </button>
-          </div>
-
           <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-sm text-sm space-y-5">
              <div className="flex items-center gap-3 pb-2 border-b border-slate-50">
                 <Users className="w-5 h-5 text-indigo-600" />
@@ -790,51 +1144,6 @@ export const DashboardView: React.FC<{
           </div>
         </div>
       </div>
-
-      {isJiraModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-           <div className="bg-white rounded-[40px] w-full max-w-lg shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-              <div className="p-12 space-y-8">
-                <div className="flex justify-between items-center">
-                   <div>
-                     <h3 className="text-3xl font-black text-slate-800">Bridge <span className="text-sky-600">Jira</span></h3>
-                     <p className="text-slate-400 text-xs mt-1">Configuring environment for SHAB MOB project.</p>
-                   </div>
-                   <button onClick={() => setIsJiraModalOpen(false)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"><X /></button>
-                </div>
-                
-                <div className="space-y-5">
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 focus-within:ring-2 focus-within:ring-sky-500 transition-all">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Instance Endpoint</label>
-                    <div className="flex items-center gap-2">
-                      <Globe className="w-4 h-4 text-slate-300" />
-                      <input type="text" placeholder="https://company.atlassian.net" value={jiraUrl} onChange={(e) => setJiraUrl(e.target.value)} className="bg-transparent border-none focus:ring-0 w-full text-sm font-bold text-slate-800" />
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 focus-within:ring-2 focus-within:ring-sky-500 transition-all">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Project Key</label>
-                      <input type="text" placeholder="SHAB" value={jiraKey} onChange={(e) => setJiraKey(e.target.value)} className="bg-transparent border-none focus:ring-0 w-full text-sm font-bold text-slate-800" />
-                    </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl px-6 py-5 focus-within:ring-2 focus-within:ring-sky-500 transition-all">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Display Name</label>
-                      <input type="text" placeholder="SHAB MOB" value={jiraProjectName} onChange={(e) => setJiraProjectName(e.target.value)} className="bg-transparent border-none focus:ring-0 w-full text-sm font-bold text-slate-800" />
-                    </div>
-                  </div>
-
-                  <div className="p-6 bg-sky-50 text-sky-700 text-xs font-bold rounded-3xl border border-sky-100 flex items-start gap-3">
-                    <Info className="w-5 h-5 shrink-0" />
-                    <p className="leading-relaxed">
-                      This link will synchronize all issues from the <strong>{jiraProjectName}</strong> project directly to your BSS-PMO dashboard for <strong>Ahmed.nabil@bssconnects.com</strong>.
-                    </p>
-                  </div>
-                </div>
-                <button onClick={handleConnectJira} className="w-full py-5 bg-sky-600 text-white rounded-[24px] font-black shadow-xl shadow-sky-100 hover:bg-sky-700 transition-all active:scale-95 text-sm uppercase tracking-widest">Activate Connection</button>
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -845,31 +1154,80 @@ export const BacklogView: React.FC<{
   onDownloadPDF?: () => void 
 }> = ({ backlog, onUpdate, onDownloadPDF }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
-  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
+
+    const fileName = file.name.toLowerCase();
+    const arrayBuffer = await file.arrayBuffer();
+    let newItems: BacklogItem[] = [];
+
+    if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const wsname = workbook.SheetNames[0];
+      const ws = workbook.Sheets[wsname];
       const data: any[] = XLSX.utils.sheet_to_json(ws);
       
-      const newItems: BacklogItem[] = data.map((row, idx) => ({
+      newItems = data.map((row, idx) => ({
         id: `BL-${backlog.length + idx + 1}`,
         title: row.Title || row.title || 'Untitled Story',
         description: row.Description || row.description || '',
+        objective: row.Objective || row.objective || '',
+        acceptanceCriteria: (row.AcceptanceCriteria || row.acceptanceCriteria || '').split('\n').filter((s: string) => s.trim().length > 0),
         priority: (row.Priority || row.priority || 'Medium') as any,
         status: (row.Status || row.status || 'Backlog') as any,
         type: (row.Type || row.type || 'User Story') as any,
         estimate: parseInt(row.Estimate || row.estimate) || 0
       }));
-      
+    } else if (fileName.endsWith('.docx')) {
+      try {
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        const text = result.value;
+        // Split by lines and filter empty ones
+        const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        
+        newItems = lines.map((line, idx) => {
+          // Try to detect priority or type if present in brackets like [Bug] or [High]
+          const typeMatch = line.match(/\[(Bug|User Story|Epic|Task)\]/i);
+          const priorityMatch = line.match(/\[(Low|Medium|High|Critical)\]/i);
+          
+          let title = line;
+          let type: any = 'User Story';
+          let priority: any = 'Medium';
+          
+          if (typeMatch) {
+            type = typeMatch[1];
+            title = title.replace(typeMatch[0], '').trim();
+          }
+          if (priorityMatch) {
+            priority = priorityMatch[1];
+            title = title.replace(priorityMatch[0], '').trim();
+          }
+
+          return {
+            id: `BL-${backlog.length + idx + 1}`,
+            title: title.substring(0, 100),
+            description: line,
+            objective: '',
+            acceptanceCriteria: [],
+            priority,
+            status: 'Backlog',
+            type,
+            estimate: 0
+          };
+        });
+      } catch (err) {
+        console.error("Word parsing error", err);
+        alert("Failed to parse Word file.");
+      }
+    }
+    
+    if (newItems.length > 0) {
       onUpdate([...backlog, ...newItems]);
-    };
-    reader.readAsBinaryString(file);
+    }
+    e.target.value = '';
   };
 
   return (
@@ -877,7 +1235,7 @@ export const BacklogView: React.FC<{
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-black text-slate-900">Product <span className="text-indigo-600">Backlog</span></h2>
         <div className="flex gap-2">
-          <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleExcelUpload} />
+          <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls,.docx" onChange={handleFileUpload} />
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
             <FileUp className="w-4 h-4" /> Import Backlog
           </button>
@@ -899,43 +1257,105 @@ export const BacklogView: React.FC<{
               <th className="px-6 py-4 border-b border-slate-100">Priority</th>
               <th className="px-6 py-4 border-b border-slate-100">Status</th>
               <th className="px-6 py-4 border-b border-slate-100">Points</th>
+              <th className="px-6 py-4 border-b border-slate-100 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {backlog.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-20 text-center text-slate-300 font-bold italic">
+                <td colSpan={7} className="px-6 py-20 text-center text-slate-300 font-bold italic">
                   Backlog is empty. Import from Excel to begin.
                 </td>
               </tr>
             ) : backlog.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                <td className="px-6 py-4 font-mono text-[10px] text-slate-400 font-bold">{item.id}</td>
-                <td className="px-6 py-4">
-                  <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${
-                    item.type === 'Bug' ? 'bg-red-100 text-red-600' : 
-                    item.type === 'Epic' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                  }`}>
-                    {item.type}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <div className="font-bold text-slate-800 text-sm">{item.title}</div>
-                  <div className="text-[10px] text-slate-400 line-clamp-1">{item.description}</div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`text-[10px] font-bold ${
-                    item.priority === 'Critical' ? 'text-red-600' : 
-                    item.priority === 'High' ? 'text-orange-600' : 'text-slate-500'
-                  }`}>
-                    {item.priority}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-[10px] font-bold text-slate-600">{item.status}</span>
-                </td>
-                <td className="px-6 py-4 font-bold text-slate-800 text-sm">{item.estimate || '-'}</td>
-              </tr>
+              <React.Fragment key={item.id}>
+                <tr 
+                  className={`hover:bg-slate-50/50 transition-colors cursor-pointer ${selectedItemId === item.id ? 'bg-indigo-50/30' : ''}`}
+                  onClick={() => setSelectedItemId(selectedItemId === item.id ? null : item.id)}
+                >
+                  <td className="px-6 py-4 font-mono text-[10px] text-slate-400 font-bold">{item.id}</td>
+                  <td className="px-6 py-4">
+                    <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${
+                      item.type === 'Bug' ? 'bg-red-100 text-red-600' : 
+                      item.type === 'Epic' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {item.type}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-bold text-slate-800 text-sm">{item.title}</div>
+                    <div className="text-[10px] text-slate-400 line-clamp-1">{item.description}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`text-[10px] font-bold ${
+                      item.priority === 'Critical' ? 'text-red-600' : 
+                      item.priority === 'High' ? 'text-orange-600' : 'text-slate-500'
+                    }`}>
+                      {item.priority}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-bold text-slate-600">{item.status}</span>
+                  </td>
+                  <td className="px-6 py-4 font-bold text-slate-800 text-sm">{item.estimate || '-'}</td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setSelectedItemId(selectedItemId === item.id ? null : item.id); }}
+                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform ${selectedItemId === item.id ? 'rotate-180' : ''}`} />
+                      </button>
+                      {item.status === 'Backlog' && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onUpdate(backlog.map(i => i.id === item.id ? { ...i, status: 'Ready' } : i)); }}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-600 rounded-lg font-black text-[10px] uppercase hover:bg-indigo-100 transition-all"
+                        >
+                          <Rocket className="w-3 h-3" /> Move to Board
+                        </button>
+                      )}
+                      {item.status !== 'Backlog' && (
+                        <span className="text-[10px] font-bold text-emerald-600 uppercase flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> On Board
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {selectedItemId === item.id && (
+                  <tr className="bg-slate-50/50">
+                    <td colSpan={7} className="px-12 py-6 border-b border-slate-100 animate-in slide-in-from-top-2 duration-300">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Business Objective</h4>
+                            <p className="text-sm text-slate-700 leading-relaxed">{item.objective || 'No objective defined for this story.'}</p>
+                          </div>
+                          <div>
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Full Description</h4>
+                            <p className="text-sm text-slate-600 leading-relaxed">{item.description}</p>
+                          </div>
+                        </div>
+                        <div className="space-y-4">
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Acceptance Criteria</h4>
+                          <div className="space-y-2">
+                            {item.acceptanceCriteria && item.acceptanceCriteria.length > 0 ? (
+                              item.acceptanceCriteria.map((criteria, i) => (
+                                <div key={i} className="flex items-start gap-2">
+                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"></div>
+                                  <p className="text-sm text-slate-600">{criteria}</p>
+                                </div>
+                              ))
+                            ) : (
+                              <p className="text-sm text-slate-400 italic">No acceptance criteria defined.</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
@@ -951,6 +1371,7 @@ export const ScrumBoardView: React.FC<{
 }> = ({ backlog, sprints, onUpdateBacklog }) => {
   const activeSprint = sprints.find(s => s.status === 'Active') || sprints[0];
   const columns: BacklogItem['status'][] = ['Ready', 'In Progress', 'Done'];
+  const [selectedItem, setSelectedItem] = useState<BacklogItem | null>(null);
 
   const moveItem = (id: string, newStatus: BacklogItem['status']) => {
     onUpdateBacklog(backlog.map(item => item.id === id ? { ...item, status: newStatus } : item));
@@ -984,7 +1405,11 @@ export const ScrumBoardView: React.FC<{
             
             <div className="space-y-4">
               {backlog.filter(i => i.status === col).map(item => (
-                <div key={item.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group cursor-grab active:cursor-grabbing">
+                <div 
+                  key={item.id} 
+                  onClick={() => setSelectedItem(item)}
+                  className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+                >
                   <div className="flex justify-between items-start mb-3">
                     <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${
                       item.type === 'Bug' ? 'bg-red-50 text-red-600' : 'bg-indigo-50 text-indigo-600'
@@ -999,9 +1424,18 @@ export const ScrumBoardView: React.FC<{
                       <div className="w-6 h-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[8px] font-black text-indigo-600">AN</div>
                     </div>
                     <div className="flex items-center gap-2">
+                       {col === 'Ready' && (
+                         <button 
+                           onClick={(e) => { e.stopPropagation(); moveItem(item.id, 'Backlog'); }}
+                           className="p-1.5 bg-slate-50 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                           title="Move back to Backlog"
+                         >
+                           <History className="w-3.5 h-3.5" />
+                         </button>
+                       )}
                        {col !== 'Done' && (
                          <button 
-                           onClick={() => moveItem(item.id, col === 'Ready' ? 'In Progress' : 'Done')}
+                           onClick={(e) => { e.stopPropagation(); moveItem(item.id, col === 'Ready' ? 'In Progress' : 'Done'); }}
                            className="p-1.5 bg-slate-50 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                          >
                            <ArrowRight className="w-3.5 h-3.5" />
@@ -1015,6 +1449,554 @@ export const ScrumBoardView: React.FC<{
           </div>
         ))}
       </div>
+
+      {/* Item Details Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col">
+            <div className="p-8 border-b border-slate-100 flex justify-between items-start">
+              <div className="space-y-1">
+                <div className="flex items-center gap-3">
+                  <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${
+                    selectedItem.type === 'Bug' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'
+                  }`}>
+                    {selectedItem.type}
+                  </span>
+                  <span className="text-xs font-mono text-slate-400 font-bold">{selectedItem.id}</span>
+                </div>
+                <h3 className="text-2xl font-black text-slate-900">{selectedItem.title}</h3>
+              </div>
+              <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <X className="w-6 h-6 text-slate-400" />
+              </button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto space-y-8 flex-1">
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Priority</div>
+                  <div className={`text-sm font-bold ${
+                    selectedItem.priority === 'Critical' ? 'text-red-600' : 
+                    selectedItem.priority === 'High' ? 'text-orange-600' : 'text-slate-700'
+                  }`}>{selectedItem.priority}</div>
+                </div>
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Estimate</div>
+                  <div className="text-sm font-bold text-slate-700">{selectedItem.estimate || 0} Story Points</div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Business Objective</h4>
+                  <p className="text-sm text-slate-700 leading-relaxed bg-indigo-50/30 p-4 rounded-2xl border border-indigo-50">
+                    {selectedItem.objective || 'No objective defined for this story.'}
+                  </p>
+                </div>
+                
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Description</h4>
+                  <p className="text-sm text-slate-600 leading-relaxed">
+                    {selectedItem.description}
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Acceptance Criteria</h4>
+                  <div className="space-y-3">
+                    {selectedItem.acceptanceCriteria && selectedItem.acceptanceCriteria.length > 0 ? (
+                      selectedItem.acceptanceCriteria.map((criteria, i) => (
+                        <div key={i} className="flex items-start gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          </div>
+                          <p className="text-sm text-slate-600">{criteria}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">No acceptance criteria defined.</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button 
+                onClick={() => setSelectedItem(null)}
+                className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-100 transition-all shadow-sm"
+              >
+                Close
+              </button>
+              {selectedItem.status !== 'Done' && (
+                <button 
+                  onClick={() => {
+                    const nextStatus = selectedItem.status === 'Ready' ? 'In Progress' : 'Done';
+                    moveItem(selectedItem.id, nextStatus);
+                    setSelectedItem(null);
+                  }}
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
+                >
+                  Move to {selectedItem.status === 'Ready' ? 'In Progress' : 'Done'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ResourceDashboardView component
+export const ResourceDashboardView: React.FC<{ projects: ProjectAssets[] }> = ({ projects }) => {
+  const allResources = projects.flatMap(p => p.resources || []);
+  const uniqueResources = Array.from(new Map(allResources.map(r => [r.email, r])).values());
+  
+  const totalProjects = projects.length;
+  const totalTasks = projects.reduce((acc, p) => acc + p.activities.length, 0);
+  const activeResourcesCount = uniqueResources.length;
+  
+  // Calculate utilization based on task assignment
+  const totalAssignedTasks = projects.reduce((acc, p) => 
+    acc + p.activities.filter(a => (a.assignedResources || []).length > 0).length, 0
+  );
+  const utilization = totalTasks > 0 ? Math.round((totalAssignedTasks / totalTasks) * 100) : 0;
+  
+  const roles = uniqueResources.reduce((acc, r) => {
+    const role = (r as Resource).role;
+    acc[role] = (acc[role] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const roleData = Object.entries(roles).map(([role, count]) => ({
+    role,
+    count,
+    color: role.includes('Architect') ? 'bg-indigo-500' : 
+           role.includes('Engineer') ? 'bg-blue-500' : 
+           role.includes('Manager') ? 'bg-amber-500' : 'bg-emerald-500'
+  }));
+
+  const resourceStats = uniqueResources.map(res => {
+    const r = res as Resource;
+    const assignedTasks = projects.reduce((acc, p) => 
+      acc + p.activities.filter(a => {
+        const assignedEmails = (a.assignedResources || []).map(id => {
+          const pr = p.resources?.find(r => r.id === id);
+          return pr?.email;
+        });
+        return assignedEmails.includes(r.email);
+      }).length, 0
+    );
+    return { ...r, assignedTasks };
+  });
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-black text-slate-900">Resource <span className="text-indigo-600">Intelligence</span></h1>
+          <p className="text-slate-500">Monitor team allocation and capacity across BSS-PMO</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-4 bg-indigo-50 text-indigo-600 rounded-2xl"><Users className="w-6 h-6" /></div>
+          <div>
+            <div className="text-2xl font-black text-slate-800">{activeResourcesCount}</div>
+            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Total Team</div>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-4 bg-emerald-50 text-emerald-600 rounded-2xl"><PieChart className="w-6 h-6" /></div>
+          <div>
+            <div className="text-2xl font-black text-slate-800">{utilization}%</div>
+            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Utilization</div>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><Briefcase className="w-6 h-6" /></div>
+          <div>
+            <div className="text-2xl font-black text-slate-800">{totalProjects}</div>
+            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Project Load</div>
+          </div>
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="p-4 bg-amber-50 text-amber-600 rounded-2xl"><Clock className="w-6 h-6" /></div>
+          <div>
+            <div className="text-2xl font-black text-slate-800">{totalTasks}</div>
+            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider">Active Tasks</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+          <h3 className="font-bold text-slate-800 text-xl mb-6 flex items-center gap-2"><Users className="w-6 h-6 text-indigo-600" />Team Allocation</h3>
+          <div className="space-y-6">
+            {roleData.length === 0 ? (
+              <div className="text-center py-12 text-slate-400 italic">No resources assigned to any projects yet.</div>
+            ) : roleData.map((role, i) => (
+              <div key={i} className="space-y-2">
+                <div className="flex justify-between text-sm font-bold">
+                  <span className="text-slate-600">{role.role}</span>
+                  <span className="text-slate-900">{role.count} Members</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full ${role.color}`} style={{ width: `${(role.count / activeResourcesCount) * 100}%` }}></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-slate-900 p-8 rounded-3xl text-white flex flex-col justify-center">
+          <h3 className="font-bold text-xl mb-4">Resource Optimization</h3>
+          <p className="text-slate-400 text-sm leading-relaxed mb-6">
+            "Ahmed, current resource metrics indicate a utilization rate of {utilization}% across the portfolio. {utilization > 80 ? 'The team is approaching capacity limits. Consider prioritizing critical path activities.' : 'There is available capacity for new architectural deconstructions.'}"
+          </p>
+          <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></div>
+              <span className="text-xs font-bold uppercase tracking-widest text-emerald-400">Optimization Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-[32px] overflow-hidden shadow-sm">
+        <div className="p-8 border-b border-slate-100">
+          <h3 className="font-bold text-slate-800 text-xl flex items-center gap-2"><TrendingUp className="w-6 h-6 text-indigo-600" />Team Capacity Overview</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+              <tr>
+                <th className="px-6 py-5 border-b border-slate-100">Team Member</th>
+                <th className="px-6 py-5 border-b border-slate-100">Role</th>
+                <th className="px-6 py-5 border-b border-slate-100">Task Load</th>
+                <th className="px-6 py-5 border-b border-slate-100">Availability</th>
+                <th className="px-6 py-5 border-b border-slate-100">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {resourceStats.map((res, i) => (
+                <tr key={i} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">
+                        {res.name.split(' ').map(n => n[0]).join('')}
+                      </div>
+                      <div>
+                        <div className="font-bold text-slate-800">{res.name}</div>
+                        <div className="text-xs text-slate-400">{res.email}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-6 font-bold text-slate-600 text-sm">{res.role}</td>
+                  <td className="px-6 py-6">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-slate-800">{res.assignedTasks}</span>
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tasks</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-6">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden min-w-[80px]">
+                        <div className={`h-full ${res.availability > 70 ? 'bg-emerald-500' : res.availability > 30 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${res.availability}%` }}></div>
+                      </div>
+                      <span className="text-xs font-black text-slate-500">{res.availability}%</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-6">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                      res.assignedTasks > 5 ? 'bg-red-100 text-red-600' : res.assignedTasks > 2 ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
+                    }`}>
+                      {res.assignedTasks > 5 ? 'Overloaded' : res.assignedTasks > 2 ? 'Busy' : 'Available'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ResourceProjectsView component
+export const ResourceProjectsView: React.FC<{ 
+  projects: ProjectAssets[],
+  onOpenProject: (id: string) => void
+}> = ({ projects, onOpenProject }) => {
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+        <div className="space-y-2">
+          <h1 className="text-4xl font-black text-slate-900">Resource <span className="text-indigo-600">Projects</span></h1>
+          <p className="text-slate-500">Project-specific resource mapping and allocation</p>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-[32px] overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-wider">
+              <tr>
+                <th className="px-6 py-5 border-b border-slate-100">Project Name</th>
+                <th className="px-6 py-5 border-b border-slate-100">Assigned Team</th>
+                <th className="px-6 py-5 border-b border-slate-100">Task Load</th>
+                <th className="px-6 py-5 border-b border-slate-100">Status</th>
+                <th className="px-6 py-5 border-b border-slate-100 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {projects.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-20 text-center text-slate-300 font-bold italic">
+                    No projects detected in the portfolio.
+                  </td>
+                </tr>
+              ) : projects.map((project) => (
+                <tr 
+                  key={project.id} 
+                  onClick={() => onOpenProject(project.id)}
+                  className="hover:bg-indigo-50/30 transition-colors group cursor-pointer"
+                >
+                  <td className="px-6 py-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><Briefcase className="w-4 h-4" /></div>
+                      <span className="font-bold text-slate-800">{project.metadata.projectName}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-6">
+                    <div className="flex -space-x-2">
+                      {(project.resources || []).length > 0 ? (
+                        project.resources?.slice(0, 3).map((res, i) => (
+                          <div key={i} className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500" title={res.name}>
+                            {res.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-xs text-slate-400 italic">No resources</div>
+                      )}
+                      {(project.resources || []).length > 3 && (
+                        <div className="w-8 h-8 rounded-full border-2 border-white bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-600">
+                          +{(project.resources || []).length - 3}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-6">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden max-w-[100px]">
+                        <div className="h-full bg-indigo-500" style={{ width: `${Math.min(100, (project.activities.length / 10) * 100)}%` }}></div>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500">{project.activities.length} Tasks</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-6">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                      project.isArchived ? 'bg-slate-100 text-slate-400' : 'bg-emerald-100 text-emerald-600'
+                    }`}>
+                      {project.isArchived ? 'Archived' : 'Active'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-6 text-right">
+                    <button className="p-2 bg-white border border-slate-200 rounded-xl text-slate-400 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-all shadow-sm">
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export const ProjectResourcesView: React.FC<{ 
+  resources: Resource[], 
+  activities: Activity[],
+  onUpdate: (resources: Resource[]) => void 
+}> = ({ resources, activities, onUpdate }) => {
+  const [isAdding, setIsAdding] = useState(false);
+  const [newResource, setNewResource] = useState<Partial<Resource>>({
+    name: '',
+    email: '',
+    role: 'Solution Architect',
+    availability: 100
+  });
+
+  const handleAdd = () => {
+    if (!newResource.name || !newResource.email) return;
+    onUpdate([...resources, { ...newResource as Resource, id: `RES-${Date.now()}` }]);
+    setIsAdding(false);
+    setNewResource({ name: '', email: '', role: 'Solution Architect', availability: 100 });
+  };
+
+  const handleRemove = (id: string) => {
+    onUpdate(resources.filter(r => r.id !== id));
+  };
+
+  const handleEdit = (id: string, field: keyof Resource, value: any) => {
+    onUpdate(resources.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const getTaskCount = (resourceId: string) => {
+    return activities.filter(a => (a.assignedResources || []).includes(resourceId)).length;
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-slate-900">Project <span className="text-indigo-600">Resources</span></h2>
+        <button 
+          onClick={() => setIsAdding(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm"
+        >
+          <Plus className="w-4 h-4" /> Add Resource
+        </button>
+      </div>
+
+      {isAdding && (
+        <div className="bg-white border border-indigo-100 rounded-3xl p-6 shadow-xl shadow-indigo-50 animate-in slide-in-from-top-4 duration-300">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</label>
+              <input 
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={newResource.name}
+                onChange={(e) => setNewResource({ ...newResource, name: e.target.value })}
+                placeholder="e.g. John Doe"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</label>
+              <input 
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={newResource.email}
+                onChange={(e) => setNewResource({ ...newResource, email: e.target.value })}
+                placeholder="e.g. john@bssconnects.com"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</label>
+              <select 
+                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
+                value={newResource.role}
+                onChange={(e) => setNewResource({ ...newResource, role: e.target.value })}
+              >
+                <option value="Solution Architect">Solution Architect</option>
+                <option value="Frontend Engineer">Frontend Engineer</option>
+                <option value="Backend Engineer">Backend Engineer</option>
+                <option value="Fullstack Engineer">Fullstack Engineer</option>
+                <option value="DevOps Engineer">DevOps Engineer</option>
+                <option value="Data Engineer">Data Engineer</option>
+                <option value="Project Manager">Project Manager</option>
+                <option value="Product Owner">Product Owner</option>
+                <option value="QA Engineer">QA Engineer</option>
+                <option value="UI/UX Designer">UI/UX Designer</option>
+                <option value="Business Analyst">Business Analyst</option>
+                <option value="Security Specialist">Security Specialist</option>
+              </select>
+            </div>
+            <div className="flex items-end gap-2">
+              <button onClick={handleAdd} className="flex-1 bg-indigo-600 text-white rounded-xl py-2 font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all">Add</button>
+              <button onClick={() => setIsAdding(false)} className="p-2 bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-200 transition-all"><X className="w-5 h-5" /></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {resources.map((res) => {
+          const taskCount = getTaskCount(res.id);
+          return (
+            <div key={res.id} className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group relative">
+              <button 
+                onClick={() => handleRemove(res.id)}
+                className="absolute top-4 right-4 p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-lg font-black">
+                  {res.name.split(' ').map(n => n[0]).join('')}
+                </div>
+                <div>
+                  <input 
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 font-black text-slate-800 text-lg"
+                    value={res.name}
+                    onChange={(e) => handleEdit(res.id, 'name', e.target.value)}
+                  />
+                  <input 
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-indigo-600"
+                    value={res.email}
+                    onChange={(e) => handleEdit(res.id, 'email', e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Role</label>
+                    <select 
+                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-1.5 text-xs font-bold outline-none"
+                      value={res.role}
+                      onChange={(e) => handleEdit(res.id, 'role', e.target.value)}
+                    >
+                      <option value="Solution Architect">Solution Architect</option>
+                      <option value="Frontend Engineer">Frontend Engineer</option>
+                      <option value="Backend Engineer">Backend Engineer</option>
+                      <option value="Fullstack Engineer">Fullstack Engineer</option>
+                      <option value="DevOps Engineer">DevOps Engineer</option>
+                      <option value="Data Engineer">Data Engineer</option>
+                      <option value="Project Manager">Project Manager</option>
+                      <option value="Product Owner">Product Owner</option>
+                      <option value="QA Engineer">QA Engineer</option>
+                      <option value="UI/UX Designer">UI/UX Designer</option>
+                      <option value="Business Analyst">Business Analyst</option>
+                      <option value="Security Specialist">Security Specialist</option>
+                    </select>
+                  </div>
+                  <div className="ml-4 text-right">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tasks</div>
+                    <div className="text-sm font-black text-slate-800">{taskCount}</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+                    <span>Availability</span>
+                    <span>{res.availability}%</span>
+                  </div>
+                  <input 
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="10"
+                    className="w-full h-1.5 bg-slate-100 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                    value={res.availability}
+                    onChange={(e) => handleEdit(res.id, 'availability', parseInt(e.target.value))}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {resources.length === 0 && !isAdding && (
+        <div className="text-center py-20 bg-slate-50 rounded-[40px] border-2 border-dashed border-slate-200">
+          <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-500 font-bold">No resources assigned to this project.</p>
+          <button onClick={() => setIsAdding(true)} className="mt-4 text-indigo-600 font-black text-xs uppercase tracking-widest hover:underline">Add First Resource</button>
+        </div>
+      )}
     </div>
   );
 };
