@@ -86,6 +86,17 @@ export interface Sprint {
   status: 'Planned' | 'Active' | 'Completed';
 }
 
+export interface ProjectDependency {
+  id: string;
+  sourceActivityId: string;
+  targetActivityId: string;
+  roadmapPhaseName?: string;
+  description: string;
+  type: 'Critical' | 'Technical' | 'Business';
+  impact: 'Low' | 'Medium' | 'High';
+  status: 'Identified' | 'Resolved' | 'At Risk';
+}
+
 export interface ProjectAssets {
   id: string;
   metadata: {
@@ -104,12 +115,7 @@ export interface ProjectAssets {
   backlog: BacklogItem[];
   sprints: Sprint[];
   resources: Resource[];
-  dependencies?: {
-    id: string;
-    from: string;
-    to: string;
-    type: 'Critical' | 'Technical' | 'Business';
-  }[];
+  dependencies: ProjectDependency[];
   lastUpdated: string;
   isArchived?: boolean;
 }

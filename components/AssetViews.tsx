@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType } from '../types';
+import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType, ProjectDependency } from '../types';
 import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
@@ -526,9 +526,10 @@ export const LLDView: React.FC<{ components: LLDComponent[], onUpdate: (comps: L
 export const ActivityTableView: React.FC<{ 
   activities: Activity[], 
   resources?: Resource[],
+  dependencies?: ProjectDependency[],
   onUpdate: (activities: Activity[]) => void,
   onDownloadPDF?: () => void
-}> = ({ activities, resources = [], onUpdate, onDownloadPDF }) => {
+}> = ({ activities, resources = [], dependencies = [], onUpdate, onDownloadPDF }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showResourcePicker, setShowResourcePicker] = useState<string | null>(null);
 
@@ -547,6 +548,10 @@ export const ActivityTableView: React.FC<{
       }
       return a;
     }));
+  };
+
+  const getActivityDependencies = (activityId: string) => {
+    return dependencies.filter(d => d.sourceActivityId === activityId || d.targetActivityId === activityId);
   };
 
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -612,55 +617,78 @@ export const ActivityTableView: React.FC<{
               <th className="px-6 py-5 border-b border-slate-100">Activity Detail</th>
               <th className="px-6 py-5 border-b border-slate-100">Execution Status</th>
               <th className="px-6 py-5 border-b border-slate-100">Timeline</th>
+              <th className="px-6 py-5 border-b border-slate-100">Dependencies</th>
+              <th className="px-6 py-5 border-b border-slate-100">Resources</th>
               <th className="px-6 py-5 border-b border-slate-100">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {activities.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-20 text-center text-slate-300 font-bold italic">
+                <td colSpan={7} className="px-6 py-20 text-center text-slate-300 font-bold italic">
                   No activities detected. Import from Excel to begin.
                 </td>
               </tr>
-            ) : activities.map((act) => (
-              <tr key={act.id} className="hover:bg-indigo-50/30 transition-colors group">
-                <td className="px-6 py-4 font-mono text-[10px] text-slate-400 font-bold">{act.id}</td>
-                <td className="px-6 py-4">
-                  <input 
-                    className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-200"
-                    value={act.task}
-                    placeholder="Describe the task..."
-                    onChange={(e) => handleCellEdit(act.id, 'task', e.target.value)}
-                  />
-                </td>
-                <td className="px-6 py-4">
-                  <select 
-                    className={`border-none rounded-xl text-[10px] font-black uppercase px-3 py-1.5 outline-none shadow-sm transition-all ${
-                      act.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
-                      act.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
-                    }`}
-                    value={act.status}
-                    onChange={(e) => handleCellEdit(act.id, 'status', e.target.value)}
-                  >
-                    <option value="To Do">To Do</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Done">Done</option>
-                  </select>
-                </td>
-                <td className="px-6 py-4">
-                   <div className="flex items-center gap-3">
-                     <div className="flex flex-col">
-                       <label className="text-[8px] font-black text-slate-300 uppercase">Start Date</label>
-                       <input type="date" value={act.startDate} onChange={(e) => handleCellEdit(act.id, 'startDate', e.target.value)} className="bg-transparent border-none text-[10px] p-0 font-bold text-slate-500 w-24 focus:ring-0" />
+            ) : activities.map((act) => {
+              const activityDeps = getActivityDependencies(act.id);
+              return (
+                <tr key={act.id} className="hover:bg-indigo-50/30 transition-colors group">
+                  <td className="px-6 py-4 font-mono text-[10px] text-slate-400 font-bold">{act.id}</td>
+                  <td className="px-6 py-4">
+                    <input 
+                      className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-200"
+                      value={act.task}
+                      placeholder="Describe the task..."
+                      onChange={(e) => handleCellEdit(act.id, 'task', e.target.value)}
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <select 
+                      className={`border-none rounded-xl text-[10px] font-black uppercase px-3 py-1.5 outline-none shadow-sm transition-all ${
+                        act.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
+                        act.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
+                      }`}
+                      value={act.status}
+                      onChange={(e) => handleCellEdit(act.id, 'status', e.target.value)}
+                    >
+                      <option value="To Do">To Do</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Done">Done</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
+                     <div className="flex items-center gap-3">
+                       <div className="flex flex-col">
+                         <label className="text-[8px] font-black text-slate-300 uppercase">Start Date</label>
+                         <input type="date" value={act.startDate} onChange={(e) => handleCellEdit(act.id, 'startDate', e.target.value)} className="bg-transparent border-none text-[10px] p-0 font-bold text-slate-500 w-24 focus:ring-0" />
+                       </div>
+                       <div className="w-px h-6 bg-slate-200"></div>
+                       <div className="flex flex-col">
+                         <label className="text-[8px] font-black text-slate-300 uppercase">Days</label>
+                         <input type="number" value={act.duration} onChange={(e) => handleCellEdit(act.id, 'duration', parseInt(e.target.value) || 0)} className="bg-transparent border-none text-[10px] p-0 font-bold text-slate-400 w-8 focus:ring-0" />
+                       </div>
                      </div>
-                     <div className="w-px h-6 bg-slate-200"></div>
-                     <div className="flex flex-col">
-                       <label className="text-[8px] font-black text-slate-300 uppercase">Days</label>
-                       <input type="number" value={act.duration} onChange={(e) => handleCellEdit(act.id, 'duration', parseInt(e.target.value) || 0)} className="bg-transparent border-none text-[10px] p-0 font-bold text-slate-400 w-8 focus:ring-0" />
-                     </div>
-                   </div>
-                </td>
-                <td className="px-6 py-4">
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex flex-wrap gap-1">
+                      {activityDeps.length > 0 ? (
+                        activityDeps.map(d => (
+                          <div 
+                            key={d.id} 
+                            className={`px-2 py-0.5 rounded text-[8px] font-black uppercase border ${
+                              d.sourceActivityId === act.id ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'
+                            }`}
+                            title={d.description}
+                          >
+                            {d.sourceActivityId === act.id ? 'Pre' : 'Suc'}
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-[10px] text-slate-300 italic">None</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
                   <div className="relative">
                     <button 
                       onClick={() => setShowResourcePicker(showResourcePicker === act.id ? null : act.id)}
@@ -714,7 +742,8 @@ export const ActivityTableView: React.FC<{
                   <button onClick={() => onUpdate(activities.filter(a => a.id !== act.id))} className="p-2 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
                 </td>
               </tr>
-            ))}
+            );
+          })}
           </tbody>
         </table>
       </div>
@@ -726,7 +755,12 @@ export const ActivityTableView: React.FC<{
   );
 };
 
-export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: RoadmapPhase[]) => void, onDownloadPDF?: () => void }> = ({ phases, onUpdate, onDownloadPDF }) => {
+export const RoadmapView: React.FC<{ 
+  phases: RoadmapPhase[], 
+  dependencies?: ProjectDependency[],
+  onUpdate: (phases: RoadmapPhase[]) => void, 
+  onDownloadPDF?: () => void 
+}> = ({ phases, dependencies = [], onUpdate, onDownloadPDF }) => {
   const handleCellEdit = (index: number, field: keyof RoadmapPhase, value: any) => {
     const newPhases = [...phases];
     newPhases[index] = { ...newPhases[index], [field]: value };
@@ -764,6 +798,10 @@ export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: 
     onUpdate(phases.filter((_, i) => i !== index));
   };
 
+  const getPhaseDependencies = (phaseName: string) => {
+    return dependencies.filter(d => d.roadmapPhaseName === phaseName);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
@@ -787,30 +825,38 @@ export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: 
         <div className="md:hidden absolute left-4 w-1 h-full bg-slate-200 rounded-full"></div>
   
         <div className="space-y-12 relative">
-          {phases.map((phase, idx) => (
-            <div key={idx} className={`relative flex flex-col md:flex-row items-center ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}>
-              <div className="absolute left-[-22px] md:left-1/2 md:transform md:-translate-x-1/2 w-10 h-10 rounded-full bg-white border-4 border-indigo-600 z-10 flex items-center justify-center shadow-lg">
-                 <span className="text-indigo-600 font-black text-sm">{idx + 1}</span>
-              </div>
-  
-              <div className={`w-full md:w-5/12 ${idx % 2 === 0 ? 'md:pl-12' : 'md:pr-12'}`}>
-                <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group relative">
-                  <button 
-                    onClick={() => removePhase(idx)}
-                    className="absolute top-4 right-4 p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2">
-                      <Calendar className="w-3 h-3" />
-                      <input 
-                        className="bg-transparent border-none focus:ring-0 p-0 text-xs font-bold w-20"
-                        value={phase.duration}
-                        onChange={(e) => handleCellEdit(idx, 'duration', e.target.value)}
-                      />
+          {phases.map((phase, idx) => {
+            const phaseDeps = getPhaseDependencies(phase.phaseName);
+            return (
+              <div key={idx} className={`relative flex flex-col md:flex-row items-center ${idx % 2 === 0 ? 'md:flex-row-reverse' : ''}`}>
+                <div className="absolute left-[-22px] md:left-1/2 md:transform md:-translate-x-1/2 w-10 h-10 rounded-full bg-white border-4 border-indigo-600 z-10 flex items-center justify-center shadow-lg">
+                   <span className="text-indigo-600 font-black text-sm">{idx + 1}</span>
+                </div>
+    
+                <div className={`w-full md:w-5/12 ${idx % 2 === 0 ? 'md:pl-12' : 'md:pr-12'}`}>
+                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm hover:shadow-md transition-all group relative">
+                    <button 
+                      onClick={() => removePhase(idx)}
+                      className="absolute top-4 right-4 p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-2">
+                        <Calendar className="w-3 h-3" />
+                        <input 
+                          className="bg-transparent border-none focus:ring-0 p-0 text-xs font-bold w-20"
+                          value={phase.duration}
+                          onChange={(e) => handleCellEdit(idx, 'duration', e.target.value)}
+                        />
+                      </div>
+                      {phaseDeps.length > 0 && (
+                        <div className="flex items-center gap-1">
+                          <Link2 className="w-3 h-3 text-amber-500" />
+                          <span className="text-[8px] font-black text-amber-600 uppercase">{phaseDeps.length} Deps</span>
+                        </div>
+                      )}
                     </div>
-                  </div>
                   <input 
                     className="w-full text-xl font-bold text-slate-800 mb-4 bg-transparent border-none focus:ring-0 p-0 group-hover:text-indigo-600 transition-colors"
                     value={phase.phaseName}
@@ -845,11 +891,18 @@ export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: 
                           </button>
                         </div>
                         {ms.dependency && (
-                          <div className="ml-9 flex items-center gap-2">
-                            <div className="w-px h-3 bg-slate-200"></div>
-                            <span className="text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
-                              Depends on: {ms.dependency}
-                            </span>
+                          <div className="ml-9 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <div className="w-px h-3 bg-slate-200"></div>
+                              <span className="text-[9px] font-black text-amber-600 uppercase tracking-tighter bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100">
+                                Depends on: {ms.dependency}
+                              </span>
+                            </div>
+                            {dependencies.find(d => d.id === ms.dependency) && (
+                              <p className="text-[9px] text-slate-400 italic ml-2">
+                                {dependencies.find(d => d.id === ms.dependency)?.description}
+                              </p>
+                            )}
                           </div>
                         )}
                       </div>
@@ -865,7 +918,8 @@ export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: 
               </div>
               <div className="hidden md:block w-5/12"></div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
@@ -874,29 +928,59 @@ export const RoadmapView: React.FC<{ phases: RoadmapPhase[], onUpdate: (phases: 
 
 export const DependencyView: React.FC<{ 
   assets: ProjectAssets,
-  onUpdate: (deps: any[]) => void,
+  onUpdate: (deps: ProjectDependency[]) => void,
   onDownloadPDF?: () => void 
 }> = ({ assets, onUpdate, onDownloadPDF }) => {
   const dependencies = assets.dependencies || [];
+  const [selectedDepId, setSelectedDepId] = useState<string | null>(null);
 
   const handleAdd = () => {
-    onUpdate([...dependencies, { id: `DEP-${Date.now()}`, from: '', to: '', type: 'Technical' }]);
+    const newDep: ProjectDependency = { 
+      id: `DEP-${Date.now()}`, 
+      sourceActivityId: '', 
+      targetActivityId: '', 
+      roadmapPhaseName: assets.roadmap[0]?.phaseName || '',
+      description: 'New dependency description',
+      type: 'Technical',
+      impact: 'Medium',
+      status: 'Identified'
+    };
+    onUpdate([...dependencies, newDep]);
+    setSelectedDepId(newDep.id);
   };
 
-  const handleEdit = (index: number, field: string, value: string) => {
-    const newDeps = [...dependencies];
-    newDeps[index] = { ...newDeps[index], [field]: value };
-    onUpdate(newDeps);
+  const handleEdit = (id: string, field: keyof ProjectDependency, value: any) => {
+    onUpdate(dependencies.map(dep => dep.id === id ? { ...dep, [field]: value } : dep));
   };
 
-  const handleRemove = (index: number) => {
-    onUpdate(dependencies.filter((_, i) => i !== index));
+  const handleRemove = (id: string) => {
+    onUpdate(dependencies.filter(dep => dep.id !== id));
+    if (selectedDepId === id) setSelectedDepId(null);
+  };
+
+  const getStatusColor = (status: ProjectDependency['status']) => {
+    switch (status) {
+      case 'Resolved': return 'bg-emerald-100 text-emerald-600';
+      case 'At Risk': return 'bg-red-100 text-red-600';
+      default: return 'bg-amber-100 text-amber-600';
+    }
+  };
+
+  const getImpactColor = (impact: ProjectDependency['impact']) => {
+    switch (impact) {
+      case 'High': return 'text-red-600';
+      case 'Medium': return 'text-amber-600';
+      default: return 'text-slate-500';
+    }
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-black text-slate-900">Project <span className="text-indigo-600">Dependencies</span></h2>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-slate-900">Project <span className="text-indigo-600">Dependencies</span></h2>
+          <p className="text-slate-500 text-xs">Ahmed, align architectural constraints with the master schedule and roadmap.</p>
+        </div>
         <div className="flex gap-2">
           {onDownloadPDF && (
             <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
@@ -905,76 +989,203 @@ export const DependencyView: React.FC<{
           )}
           <button 
             onClick={handleAdd}
-            className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
           >
             <Plus className="w-4 h-4" /> Add Dependency
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {dependencies.map((dep, idx) => (
-          <div key={idx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group relative">
-            <button 
-              onClick={() => handleRemove(idx)}
-              className="absolute top-4 right-4 p-1 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          {dependencies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
+              <Link2 className="w-12 h-12 text-slate-300 mb-4" />
+              <p className="text-slate-500 font-medium">No dependencies defined yet.</p>
+            </div>
+          ) : dependencies.map((dep) => (
+            <div 
+              key={dep.id} 
+              onClick={() => setSelectedDepId(dep.id)}
+              className={`bg-white border rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group relative ${selectedDepId === dep.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200'}`}
             >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="p-2 bg-indigo-50 rounded-lg">
-                <Link2 className="w-4 h-4 text-indigo-600" />
-              </div>
-              <select 
-                className="bg-transparent border-none focus:ring-0 p-0 text-xs font-bold text-indigo-600 uppercase tracking-widest"
-                value={dep.type}
-                onChange={(e) => handleEdit(idx, 'type', e.target.value)}
+              <button 
+                onClick={(e) => { e.stopPropagation(); handleRemove(dep.id); }}
+                className="absolute top-6 right-6 p-1.5 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
               >
-                <option value="Critical">Critical</option>
-                <option value="Technical">Technical</option>
-                <option value="Business">Business</option>
-              </select>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Source (Depends On)</label>
-                <input 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                  placeholder="e.g. API Readiness"
-                  value={dep.from}
-                  onChange={(e) => handleEdit(idx, 'from', e.target.value)}
-                />
-              </div>
-              <div className="flex justify-center">
-                <ArrowRight className="w-4 h-4 text-slate-300" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Target (Impacted Item)</label>
-                <input 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                  placeholder="e.g. UI Integration"
-                  value={dep.to}
-                  onChange={(e) => handleEdit(idx, 'to', e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
+                <Trash2 className="w-4 h-4" />
+              </button>
 
-      {dependencies.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-          <Link2 className="w-12 h-12 text-slate-300 mb-4" />
-          <p className="text-slate-500 font-medium">No dependencies defined yet.</p>
-          <button 
-            onClick={handleAdd}
-            className="mt-4 text-indigo-600 font-bold text-sm hover:underline"
-          >
-            Click here to add your first dependency
-          </button>
+              <div className="flex items-center gap-3 mb-4">
+                <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${getStatusColor(dep.status)}`}>
+                  {dep.status}
+                </span>
+                <span className="text-[10px] font-mono text-slate-400 font-bold">#{dep.id}</span>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Source Activity</div>
+                  <div className="font-bold text-slate-800 text-sm truncate">
+                    {assets.activities.find(a => a.id === dep.sourceActivityId)?.task || 'Unlinked Activity'}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400">{dep.sourceActivityId || 'No ID'}</div>
+                </div>
+                <div className="shrink-0">
+                  <ArrowRight className="w-4 h-4 text-slate-300" />
+                </div>
+                <div className="flex-1">
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Target Activity</div>
+                  <div className="font-bold text-slate-800 text-sm truncate">
+                    {assets.activities.find(a => a.id === dep.targetActivityId)?.task || 'Unlinked Activity'}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400">{dep.targetActivityId || 'No ID'}</div>
+                </div>
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-3 h-3 text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{dep.roadmapPhaseName || 'No Phase'}</span>
+                </div>
+                <div className={`text-[10px] font-black uppercase ${getImpactColor(dep.impact)}`}>
+                  {dep.impact} Impact
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+
+        <div className="lg:sticky lg:top-8 h-fit">
+          {selectedDepId ? (
+            <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-xl animate-in slide-in-from-right-4 duration-500">
+              {(() => {
+                const dep = dependencies.find(d => d.id === selectedDepId);
+                if (!dep) return null;
+                return (
+                  <div className="space-y-8">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1">
+                        <h3 className="text-xl font-black text-slate-900">Dependency <span className="text-indigo-600">Details</span></h3>
+                        <p className="text-slate-400 text-[10px] font-mono font-bold uppercase tracking-widest">{dep.id}</p>
+                      </div>
+                      <button onClick={() => setSelectedDepId(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                        <X className="w-5 h-5 text-slate-400" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Type</label>
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={dep.type}
+                          onChange={(e) => handleEdit(dep.id, 'type', e.target.value)}
+                        >
+                          <option value="Critical">Critical</option>
+                          <option value="Technical">Technical</option>
+                          <option value="Business">Business</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</label>
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={dep.status}
+                          onChange={(e) => handleEdit(dep.id, 'status', e.target.value)}
+                        >
+                          <option value="Identified">Identified</option>
+                          <option value="Resolved">Resolved</option>
+                          <option value="At Risk">At Risk</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Source Activity (Predecessor)</label>
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={dep.sourceActivityId}
+                          onChange={(e) => handleEdit(dep.id, 'sourceActivityId', e.target.value)}
+                        >
+                          <option value="">Select Activity...</option>
+                          {assets.activities.map(a => (
+                            <option key={a.id} value={a.id}>[{a.id}] {a.task}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Target Activity (Successor)</label>
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={dep.targetActivityId}
+                          onChange={(e) => handleEdit(dep.id, 'targetActivityId', e.target.value)}
+                        >
+                          <option value="">Select Activity...</option>
+                          {assets.activities.map(a => (
+                            <option key={a.id} value={a.id}>[{a.id}] {a.task}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Roadmap Phase Integration</label>
+                        <select 
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                          value={dep.roadmapPhaseName}
+                          onChange={(e) => handleEdit(dep.id, 'roadmapPhaseName', e.target.value)}
+                        >
+                          <option value="">Select Phase...</option>
+                          {assets.roadmap.map(p => (
+                            <option key={p.phaseName} value={p.phaseName}>{p.phaseName}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Description & Impact Analysis</label>
+                      <textarea 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-sm text-slate-600 leading-relaxed outline-none focus:ring-2 focus:ring-indigo-500/20 min-h-[100px]"
+                        value={dep.description}
+                        onChange={(e) => handleEdit(dep.id, 'description', e.target.value)}
+                        placeholder="Describe the dependency and its impact on the project schedule..."
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impact Level</label>
+                      <div className="flex gap-2">
+                        {['Low', 'Medium', 'High'].map((level) => (
+                          <button
+                            key={level}
+                            onClick={() => handleEdit(dep.id, 'impact', level)}
+                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                              dep.impact === level 
+                                ? (level === 'High' ? 'bg-red-600 text-white shadow-lg shadow-red-200' : level === 'Medium' ? 'bg-amber-500 text-white shadow-lg shadow-amber-200' : 'bg-slate-600 text-white shadow-lg shadow-slate-200')
+                                : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                            }`}
+                          >
+                            {level}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-[32px] p-12 text-center flex flex-col items-center justify-center h-full min-h-[400px]">
+              <div className="p-4 bg-white rounded-2xl shadow-sm mb-4">
+                <Settings2 className="w-8 h-8 text-slate-300" />
+              </div>
+              <h4 className="text-slate-800 font-bold mb-2">Detailed Configuration</h4>
+              <p className="text-slate-400 text-sm max-w-[200px] mx-auto">Select a dependency card to view and edit its full architectural details.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

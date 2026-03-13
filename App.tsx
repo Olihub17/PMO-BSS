@@ -541,11 +541,12 @@ const App: React.FC = () => {
                   <ActivityTableView 
                     activities={currentProject.activities} 
                     resources={currentProject.resources || []}
+                    dependencies={currentProject.dependencies || []}
                     onUpdate={(a) => updateCurrentProject({ activities: a })} 
                     onDownloadPDF={() => handleExportPDF('ACTIVITIES')} 
                   />
                 )}
-                {activeTab === 'ROADMAP' && <RoadmapView phases={currentProject.roadmap} onUpdate={(phases) => updateCurrentProject({ roadmap: phases })} onDownloadPDF={() => handleExportPDF('ROADMAP')} />}
+                {activeTab === 'ROADMAP' && <RoadmapView phases={currentProject.roadmap} dependencies={currentProject.dependencies || []} onUpdate={(phases) => updateCurrentProject({ roadmap: phases })} onDownloadPDF={() => handleExportPDF('ROADMAP')} />}
                 {activeTab === 'DEPENDENCIES' && <DependencyView assets={currentProject} onUpdate={(deps) => updateCurrentProject({ dependencies: deps })} onDownloadPDF={() => handleExportPDF('DEPENDENCIES')} />}
                 {activeTab === 'RESOURCES' && (
                   <ProjectResourcesView 
