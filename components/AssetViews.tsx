@@ -1156,6 +1156,58 @@ export const BacklogView: React.FC<{
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
+  const handleEdit = (id: string, field: keyof BacklogItem, value: any) => {
+    onUpdate(backlog.map(item => item.id === id ? { ...item, [field]: value } : item));
+  };
+
+  const handleRemove = (id: string) => {
+    if (confirm('Are you sure you want to remove this item?')) {
+      onUpdate(backlog.filter(item => item.id !== id));
+    }
+  };
+
+  const handleAddStory = () => {
+    const newId = `BL-${backlog.length + 1}`;
+    const newItem: BacklogItem = {
+      id: newId,
+      title: 'New User Story',
+      description: 'Describe the story here...',
+      objective: '',
+      acceptanceCriteria: [],
+      priority: 'Medium',
+      status: 'Backlog',
+      type: 'User Story',
+      estimate: 0
+    };
+    onUpdate([...backlog, newItem]);
+    setSelectedItemId(newId);
+  };
+
+  const handleAddCriteria = (id: string) => {
+    const item = backlog.find(i => i.id === id);
+    if (item) {
+      const newCriteria = [...(item.acceptanceCriteria || []), ''];
+      handleEdit(id, 'acceptanceCriteria', newCriteria);
+    }
+  };
+
+  const handleEditCriteria = (id: string, index: number, value: string) => {
+    const item = backlog.find(i => i.id === id);
+    if (item && item.acceptanceCriteria) {
+      const newCriteria = [...item.acceptanceCriteria];
+      newCriteria[index] = value;
+      handleEdit(id, 'acceptanceCriteria', newCriteria);
+    }
+  };
+
+  const handleRemoveCriteria = (id: string, index: number) => {
+    const item = backlog.find(i => i.id === id);
+    if (item && item.acceptanceCriteria) {
+      const newCriteria = item.acceptanceCriteria.filter((_, i) => i !== index);
+      handleEdit(id, 'acceptanceCriteria', newCriteria);
+    }
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1235,6 +1287,9 @@ export const BacklogView: React.FC<{
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-black text-slate-900">Product <span className="text-indigo-600">Backlog</span></h2>
         <div className="flex gap-2">
+          <button onClick={handleAddStory} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200">
+            <Plus className="w-4 h-4" /> Add Story
+          </button>
           <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls,.docx" onChange={handleFileUpload} />
           <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
             <FileUp className="w-4 h-4" /> Import Backlog
@@ -1274,32 +1329,78 @@ export const BacklogView: React.FC<{
                   onClick={() => setSelectedItemId(selectedItemId === item.id ? null : item.id)}
                 >
                   <td className="px-6 py-4 font-mono text-[10px] text-slate-400 font-bold">{item.id}</td>
-                  <td className="px-6 py-4">
-                    <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${
-                      item.type === 'Bug' ? 'bg-red-100 text-red-600' : 
-                      item.type === 'Epic' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
-                    }`}>
-                      {item.type}
-                    </span>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <select 
+                      value={item.type}
+                      onChange={(e) => handleEdit(item.id, 'type', e.target.value)}
+                      className={`text-[8px] font-black uppercase px-2 py-1 rounded-md border-none focus:ring-2 focus:ring-indigo-500/20 ${
+                        item.type === 'Bug' ? 'bg-red-100 text-red-600' : 
+                        item.type === 'Epic' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'
+                      }`}
+                    >
+                      <option value="User Story">User Story</option>
+                      <option value="Bug">Bug</option>
+                      <option value="Task">Task</option>
+                      <option value="Epic">Epic</option>
+                    </select>
                   </td>
-                  <td className="px-6 py-4">
-                    <div className="font-bold text-slate-800 text-sm">{item.title}</div>
-                    <div className="text-[10px] text-slate-400 line-clamp-1">{item.description}</div>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <input 
+                      className="w-full bg-transparent border-none focus:ring-0 p-0 font-bold text-slate-800 text-sm"
+                      value={item.title}
+                      onChange={(e) => handleEdit(item.id, 'title', e.target.value)}
+                    />
+                    <input 
+                      className="w-full bg-transparent border-none focus:ring-0 p-0 text-[10px] text-slate-400"
+                      value={item.description}
+                      onChange={(e) => handleEdit(item.id, 'description', e.target.value)}
+                    />
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`text-[10px] font-bold ${
-                      item.priority === 'Critical' ? 'text-red-600' : 
-                      item.priority === 'High' ? 'text-orange-600' : 'text-slate-500'
-                    }`}>
-                      {item.priority}
-                    </span>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <select 
+                      value={item.priority}
+                      onChange={(e) => handleEdit(item.id, 'priority', e.target.value)}
+                      className={`text-[10px] font-bold bg-transparent border-none focus:ring-0 p-0 ${
+                        item.priority === 'Critical' ? 'text-red-600' : 
+                        item.priority === 'High' ? 'text-orange-600' : 'text-slate-500'
+                      }`}
+                    >
+                      <option value="Low">Low</option>
+                      <option value="Medium">Medium</option>
+                      <option value="High">High</option>
+                      <option value="Critical">Critical</option>
+                    </select>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className="text-[10px] font-bold text-slate-600">{item.status}</span>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <select 
+                      value={item.status}
+                      onChange={(e) => handleEdit(item.id, 'status', e.target.value)}
+                      className="text-[10px] font-bold text-slate-600 bg-transparent border-none focus:ring-0 p-0"
+                    >
+                      <option value="Backlog">Backlog</option>
+                      <option value="Ready">Ready</option>
+                      <option value="In Progress">In Progress</option>
+                      <option value="Done">Done</option>
+                    </select>
                   </td>
-                  <td className="px-6 py-4 font-bold text-slate-800 text-sm">{item.estimate || '-'}</td>
+                  <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                    <input 
+                      type="number"
+                      className="w-12 bg-transparent border-none focus:ring-0 p-0 font-bold text-slate-800 text-sm"
+                      value={item.estimate || ''}
+                      onChange={(e) => handleEdit(item.id, 'estimate', parseInt(e.target.value) || 0)}
+                      placeholder="-"
+                    />
+                  </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleRemove(item.id); }}
+                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete Story"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                       <button 
                         onClick={(e) => { e.stopPropagation(); setSelectedItemId(selectedItemId === item.id ? null : item.id); }}
                         className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
@@ -1329,24 +1430,51 @@ export const BacklogView: React.FC<{
                         <div className="space-y-4">
                           <div>
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Business Objective</h4>
-                            <p className="text-sm text-slate-700 leading-relaxed">{item.objective || 'No objective defined for this story.'}</p>
+                            <textarea 
+                              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 leading-relaxed min-h-[80px] outline-none focus:ring-2 focus:ring-indigo-500/20"
+                              value={item.objective || ''}
+                              onChange={(e) => handleEdit(item.id, 'objective', e.target.value)}
+                              placeholder="Describe the business objective..."
+                            />
                           </div>
                           <div>
                             <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Full Description</h4>
-                            <p className="text-sm text-slate-600 leading-relaxed">{item.description}</p>
+                            <textarea 
+                              className="w-full bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-600 leading-relaxed min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500/20"
+                              value={item.description}
+                              onChange={(e) => handleEdit(item.id, 'description', e.target.value)}
+                              placeholder="Provide more details about this story..."
+                            />
                           </div>
                         </div>
                         <div className="space-y-4">
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Acceptance Criteria</h4>
+                          <div className="flex justify-between items-center mb-1">
+                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Acceptance Criteria</h4>
+                            <button 
+                              onClick={() => handleAddCriteria(item.id)}
+                              className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
+                            >
+                              Add Criteria
+                            </button>
+                          </div>
                           <div className="space-y-2">
-                            {item.acceptanceCriteria && item.acceptanceCriteria.length > 0 ? (
-                              item.acceptanceCriteria.map((criteria, i) => (
-                                <div key={i} className="flex items-start gap-2">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0"></div>
-                                  <p className="text-sm text-slate-600">{criteria}</p>
-                                </div>
-                              ))
-                            ) : (
+                            {(item.acceptanceCriteria || []).map((criteria, i) => (
+                              <div key={i} className="flex items-start gap-2 group/criteria">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-3 shrink-0"></div>
+                                <input 
+                                  className="flex-1 bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-600 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                  value={criteria}
+                                  onChange={(e) => handleEditCriteria(item.id, i, e.target.value)}
+                                />
+                                <button 
+                                  onClick={() => handleRemoveCriteria(item.id, i)}
+                                  className="mt-2 p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/criteria:opacity-100 transition-opacity"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                            {(!item.acceptanceCriteria || item.acceptanceCriteria.length === 0) && (
                               <p className="text-sm text-slate-400 italic">No acceptance criteria defined.</p>
                             )}
                           </div>
@@ -1375,6 +1503,45 @@ export const ScrumBoardView: React.FC<{
 
   const moveItem = (id: string, newStatus: BacklogItem['status']) => {
     onUpdateBacklog(backlog.map(item => item.id === id ? { ...item, status: newStatus } : item));
+  };
+
+  const handleEdit = (id: string, field: keyof BacklogItem, value: any) => {
+    onUpdateBacklog(backlog.map(item => item.id === id ? { ...item, [field]: value } : item));
+    if (selectedItem && selectedItem.id === id) {
+      setSelectedItem({ ...selectedItem, [field]: value });
+    }
+  };
+
+  const handleAddCriteria = (id: string) => {
+    const item = backlog.find(i => i.id === id);
+    if (item) {
+      const newCriteria = [...(item.acceptanceCriteria || []), ''];
+      handleEdit(id, 'acceptanceCriteria', newCriteria);
+    }
+  };
+
+  const handleEditCriteria = (id: string, index: number, value: string) => {
+    const item = backlog.find(i => i.id === id);
+    if (item && item.acceptanceCriteria) {
+      const newCriteria = [...item.acceptanceCriteria];
+      newCriteria[index] = value;
+      handleEdit(id, 'acceptanceCriteria', newCriteria);
+    }
+  };
+
+  const handleRemoveCriteria = (id: string, index: number) => {
+    const item = backlog.find(i => i.id === id);
+    if (item && item.acceptanceCriteria) {
+      const newCriteria = item.acceptanceCriteria.filter((_, i) => i !== index);
+      handleEdit(id, 'acceptanceCriteria', newCriteria);
+    }
+  };
+
+  const handleRemove = (id: string) => {
+    if (confirm('Are you sure you want to remove this item?')) {
+      onUpdateBacklog(backlog.filter(item => item.id !== id));
+      setSelectedItem(null);
+    }
   };
 
   return (
@@ -1455,16 +1622,27 @@ export const ScrumBoardView: React.FC<{
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
           <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col">
             <div className="p-8 border-b border-slate-100 flex justify-between items-start">
-              <div className="space-y-1">
+              <div className="space-y-1 flex-1 mr-4">
                 <div className="flex items-center gap-3">
-                  <span className={`text-[10px] font-black uppercase px-2 py-1 rounded-md ${
-                    selectedItem.type === 'Bug' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'
-                  }`}>
-                    {selectedItem.type}
-                  </span>
+                  <select 
+                    value={selectedItem.type}
+                    onChange={(e) => handleEdit(selectedItem.id, 'type', e.target.value)}
+                    className={`text-[10px] font-black uppercase px-2 py-1 rounded-md border-none focus:ring-2 focus:ring-indigo-500/20 ${
+                      selectedItem.type === 'Bug' ? 'bg-red-100 text-red-600' : 'bg-indigo-100 text-indigo-600'
+                    }`}
+                  >
+                    <option value="User Story">User Story</option>
+                    <option value="Bug">Bug</option>
+                    <option value="Task">Task</option>
+                    <option value="Epic">Epic</option>
+                  </select>
                   <span className="text-xs font-mono text-slate-400 font-bold">{selectedItem.id}</span>
                 </div>
-                <h3 className="text-2xl font-black text-slate-900">{selectedItem.title}</h3>
+                <input 
+                  className="w-full bg-transparent border-none focus:ring-0 p-0 text-2xl font-black text-slate-900"
+                  value={selectedItem.title}
+                  onChange={(e) => handleEdit(selectedItem.id, 'title', e.target.value)}
+                />
               </div>
               <button onClick={() => setSelectedItem(null)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                 <X className="w-6 h-6 text-slate-400" />
@@ -1475,45 +1653,82 @@ export const ScrumBoardView: React.FC<{
               <div className="grid grid-cols-2 gap-6">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
                   <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Priority</div>
-                  <div className={`text-sm font-bold ${
-                    selectedItem.priority === 'Critical' ? 'text-red-600' : 
-                    selectedItem.priority === 'High' ? 'text-orange-600' : 'text-slate-700'
-                  }`}>{selectedItem.priority}</div>
+                  <select 
+                    value={selectedItem.priority}
+                    onChange={(e) => handleEdit(selectedItem.id, 'priority', e.target.value)}
+                    className={`w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-bold ${
+                      selectedItem.priority === 'Critical' ? 'text-red-600' : 
+                      selectedItem.priority === 'High' ? 'text-orange-600' : 'text-slate-700'
+                    }`}
+                  >
+                    <option value="Low">Low</option>
+                    <option value="Medium">Medium</option>
+                    <option value="High">High</option>
+                    <option value="Critical">Critical</option>
+                  </select>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Estimate</div>
-                  <div className="text-sm font-bold text-slate-700">{selectedItem.estimate || 0} Story Points</div>
+                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Estimate (Points)</div>
+                  <input 
+                    type="number"
+                    className="w-full bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-slate-700"
+                    value={selectedItem.estimate || 0}
+                    onChange={(e) => handleEdit(selectedItem.id, 'estimate', parseInt(e.target.value) || 0)}
+                  />
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Business Objective</h4>
-                  <p className="text-sm text-slate-700 leading-relaxed bg-indigo-50/30 p-4 rounded-2xl border border-indigo-50">
-                    {selectedItem.objective || 'No objective defined for this story.'}
-                  </p>
+                  <textarea 
+                    className="w-full bg-indigo-50/30 border border-indigo-50 rounded-2xl p-4 text-sm text-slate-700 leading-relaxed outline-none focus:ring-2 focus:ring-indigo-500/20 min-h-[80px]"
+                    value={selectedItem.objective || ''}
+                    onChange={(e) => handleEdit(selectedItem.id, 'objective', e.target.value)}
+                    placeholder="Describe the business objective..."
+                  />
                 </div>
                 
                 <div>
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Description</h4>
-                  <p className="text-sm text-slate-600 leading-relaxed">
-                    {selectedItem.description}
-                  </p>
+                  <textarea 
+                    className="w-full bg-transparent border border-slate-100 rounded-2xl p-4 text-sm text-slate-600 leading-relaxed outline-none focus:ring-2 focus:ring-indigo-500/20 min-h-[120px]"
+                    value={selectedItem.description}
+                    onChange={(e) => handleEdit(selectedItem.id, 'description', e.target.value)}
+                    placeholder="Provide more details about this story..."
+                  />
                 </div>
 
                 <div>
-                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Acceptance Criteria</h4>
+                  <div className="flex justify-between items-center mb-2">
+                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Acceptance Criteria</h4>
+                    <button 
+                      onClick={() => handleAddCriteria(selectedItem.id)}
+                      className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:underline"
+                    >
+                      Add Criteria
+                    </button>
+                  </div>
                   <div className="space-y-3">
-                    {selectedItem.acceptanceCriteria && selectedItem.acceptanceCriteria.length > 0 ? (
-                      selectedItem.acceptanceCriteria.map((criteria, i) => (
-                        <div key={i} className="flex items-start gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          </div>
-                          <p className="text-sm text-slate-600">{criteria}</p>
+                    {(selectedItem.acceptanceCriteria || []).map((criteria, i) => (
+                      <div key={i} className="flex items-start gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100 group/criteria">
+                        <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center shrink-0 mt-0.5">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                         </div>
-                      ))
-                    ) : (
+                        <input 
+                          className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm text-slate-600"
+                          value={criteria}
+                          onChange={(e) => handleEditCriteria(selectedItem.id, i, e.target.value)}
+                        />
+                        <button 
+                          onClick={() => handleRemoveCriteria(selectedItem.id, i)}
+                          className="p-1 text-slate-300 hover:text-red-500 opacity-0 group-hover/criteria:opacity-100 transition-opacity"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {(!selectedItem.acceptanceCriteria || selectedItem.acceptanceCriteria.length === 0) && (
                       <p className="text-sm text-slate-400 italic">No acceptance criteria defined.</p>
                     )}
                   </div>
@@ -1521,25 +1736,33 @@ export const ScrumBoardView: React.FC<{
               </div>
             </div>
 
-            <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+            <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
               <button 
-                onClick={() => setSelectedItem(null)}
-                className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-100 transition-all shadow-sm"
+                onClick={() => handleRemove(selectedItem.id)}
+                className="flex items-center gap-2 px-4 py-2 text-red-500 hover:bg-red-50 rounded-xl font-bold text-xs uppercase tracking-widest transition-all"
               >
-                Close
+                <Trash2 className="w-4 h-4" /> Delete Story
               </button>
-              {selectedItem.status !== 'Done' && (
+              <div className="flex gap-3">
                 <button 
-                  onClick={() => {
-                    const nextStatus = selectedItem.status === 'Ready' ? 'In Progress' : 'Done';
-                    moveItem(selectedItem.id, nextStatus);
-                    setSelectedItem(null);
-                  }}
-                  className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
+                  onClick={() => setSelectedItem(null)}
+                  className="px-6 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-100 transition-all shadow-sm"
                 >
-                  Move to {selectedItem.status === 'Ready' ? 'In Progress' : 'Done'}
+                  Close
                 </button>
-              )}
+                {selectedItem.status !== 'Done' && (
+                  <button 
+                    onClick={() => {
+                      const nextStatus = selectedItem.status === 'Ready' ? 'In Progress' : 'Done';
+                      moveItem(selectedItem.id, nextStatus);
+                      setSelectedItem(null);
+                    }}
+                    className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200"
+                  >
+                    Move to {selectedItem.status === 'Ready' ? 'In Progress' : 'Done'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
