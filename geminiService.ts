@@ -156,9 +156,18 @@ const ASSET_SCHEMA = {
         },
         required: ["id", "name", "email", "role", "availability"]
       }
+    },
+    weeklyStatus: {
+      type: Type.OBJECT,
+      properties: {
+        headline: { type: Type.STRING },
+        accomplishments: { type: Type.ARRAY, items: { type: Type.STRING } },
+        focusNextWeek: { type: Type.ARRAY, items: { type: Type.STRING } }
+      },
+      required: ["headline", "accomplishments", "focusNextWeek"]
     }
   },
-  required: ["metadata", "summary", "wbs", "hld", "lld", "roadmap", "activities", "riskLog", "backlog", "sprints", "resources"]
+  required: ["metadata", "summary", "wbs", "hld", "lld", "roadmap", "activities", "riskLog", "backlog", "sprints", "resources", "weeklyStatus"]
 };
 
 export async function generateProjectAssets(projectName: string, content: string): Promise<ProjectAssets> {
@@ -180,6 +189,7 @@ export async function generateProjectAssets(projectName: string, content: string
       5. Sprints: Propose a set of 2-3 initial sprints (Planned status) to kick off the project.
       6. Professional Tone: Technical formal English.
       5. Metadata: Set Prepared by: Team, Organization: BSSconnects.
+      6. Weekly Status: Provide a high-level summary headline, 3-5 key accomplishments from the last week based on the project scope, and 3-5 focus areas for the next week.
       
       Strictly adhere to the JSON responseSchema.`,
       responseMimeType: "application/json",

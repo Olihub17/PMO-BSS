@@ -1,9 +1,112 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType, ProjectDependency } from '../types';
-import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical } from 'lucide-react';
+import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType, ProjectDependency, WeeklyStatus } from '../types';
+import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical, FileText } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
+
+// WeeklyStatusView component
+export const WeeklyStatusView: React.FC<{
+  status: WeeklyStatus;
+  onUpdate: (status: WeeklyStatus) => void;
+}> = ({ status, onUpdate }) => {
+  const handleHeadlineChange = (val: string) => onUpdate({ ...status, headline: val });
+  
+  const updateList = (field: 'accomplishments' | 'focusNextWeek', index: number, val: string) => {
+    const newList = [...status[field]];
+    newList[index] = val;
+    onUpdate({ ...status, [field]: newList });
+  };
+
+  const addItem = (field: 'accomplishments' | 'focusNextWeek') => {
+    onUpdate({ ...status, [field]: [...status[field], ''] });
+  };
+
+  const removeItem = (field: 'accomplishments' | 'focusNextWeek', index: number) => {
+    onUpdate({ ...status, [field]: status[field].filter((_, i) => i !== index) });
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-black text-slate-900">Weekly <span className="text-indigo-600">Status</span></h2>
+      </div>
+
+      <div className="grid grid-cols-1 gap-8">
+        {/* Headline Section */}
+        <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 block">Summary / Key Headline</label>
+          <textarea
+            className="w-full bg-slate-50 border border-slate-100 rounded-2xl p-4 text-lg font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20 min-h-[100px] resize-none"
+            value={status.headline}
+            onChange={(e) => handleHeadlineChange(e.target.value)}
+            placeholder="Enter the key headline for this week..."
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {/* Accomplishments */}
+          <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Key Accomplishments (Last Week)</label>
+              <button onClick={() => addItem('accomplishments')} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {status.accomplishments.map((item, idx) => (
+                <div key={idx} className="flex gap-3 group">
+                  <div className="mt-2 w-2 h-2 rounded-full bg-emerald-500 shrink-0"></div>
+                  <textarea
+                    className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm font-medium text-slate-700 resize-none min-h-[40px]"
+                    value={item}
+                    onChange={(e) => updateList('accomplishments', idx, e.target.value)}
+                    placeholder="Describe accomplishment..."
+                  />
+                  <button onClick={() => removeItem('accomplishments', idx)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {status.accomplishments.length === 0 && (
+                <p className="text-slate-400 text-xs italic">No accomplishments added yet.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Focus Next Week */}
+          <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+            <div className="flex justify-between items-center mb-6">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Focus for Next Week</label>
+              <button onClick={() => addItem('focusNextWeek')} className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors">
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {status.focusNextWeek.map((item, idx) => (
+                <div key={idx} className="flex gap-3 group">
+                  <div className="mt-2 w-2 h-2 rounded-full bg-indigo-500 shrink-0"></div>
+                  <textarea
+                    className="flex-1 bg-transparent border-none focus:ring-0 p-0 text-sm font-medium text-slate-700 resize-none min-h-[40px]"
+                    value={item}
+                    onChange={(e) => updateList('focusNextWeek', idx, e.target.value)}
+                    placeholder="Describe focus area..."
+                  />
+                  <button onClick={() => removeItem('focusNextWeek', idx)} className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-red-500 transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {status.focusNextWeek.length === 0 && (
+                <p className="text-slate-400 text-xs italic">No focus areas added yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // WBSView component
 export const WBSView: React.FC<{ 
@@ -1213,7 +1316,7 @@ export const DashboardView: React.FC<{
           </button>
         )}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         <div 
           onClick={() => onNavigate?.('WBS')}
           className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-300 transition-all"
@@ -1229,6 +1332,14 @@ export const DashboardView: React.FC<{
            <div className="p-3 bg-blue-50 text-blue-600 rounded-xl w-fit mb-4"><Cpu className="w-6 h-6" /></div>
            <div className="text-2xl font-black text-slate-800">{assets.hld.length}</div>
            <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">HLD Blocks</div>
+        </div>
+        <div 
+          onClick={() => onNavigate?.('WEEKLY_STATUS')}
+          className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm cursor-pointer hover:border-indigo-300 transition-all"
+        >
+           <div className="p-3 bg-indigo-50 text-indigo-600 rounded-xl w-fit mb-4"><FileText className="w-6 h-6" /></div>
+           <div className="text-2xl font-black text-slate-800">Status</div>
+           <div className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Weekly Update</div>
         </div>
         <div 
           onClick={() => onNavigate?.('RISK_LOG')}
@@ -1277,7 +1388,7 @@ export const DashboardView: React.FC<{
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
               <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
                 Top WBS Streams
@@ -1290,6 +1401,21 @@ export const DashboardView: React.FC<{
                     <span className="text-xs font-bold text-slate-700 truncate">{item.title}</span>
                   </div>
                 ))}
+              </div>
+            </div>
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center justify-between">
+                Weekly Status
+                <button onClick={() => onNavigate?.('WEEKLY_STATUS')} className="text-indigo-600 hover:underline">View All</button>
+              </h4>
+              <div className="space-y-3">
+                {assets.weeklyStatus ? (
+                  <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                    <p className="text-xs font-bold text-indigo-700 line-clamp-3">{assets.weeklyStatus.headline}</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 italic">No status update yet.</p>
+                )}
               </div>
             </div>
             <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">

@@ -97,6 +97,12 @@ export interface ProjectDependency {
   status: 'Identified' | 'Resolved' | 'At Risk';
 }
 
+export interface WeeklyStatus {
+  headline: string;
+  accomplishments: string[];
+  focusNextWeek: string[];
+}
+
 export interface ProjectAssets {
   id: string;
   metadata: {
@@ -116,8 +122,9 @@ export interface ProjectAssets {
   sprints: Sprint[];
   resources: Resource[];
   dependencies: ProjectDependency[];
+  weeklyStatus?: WeeklyStatus;
   lastUpdated: string;
   isArchived?: boolean;
 }
 
-export type AssetType = 'DASHBOARD' | 'WBS' | 'HLD' | 'LLD' | 'ACTIVITIES' | 'ROADMAP' | 'RISK_LOG' | 'ARCHIVES' | 'BACKLOG' | 'SCRUM' | 'DEPENDENCIES' | 'RESOURCES';
+export type AssetType = 'DASHBOARD' | 'WBS' | 'HLD' | 'LLD' | 'ACTIVITIES' | 'ROADMAP' | 'RISK_LOG' | 'ARCHIVES' | 'BACKLOG' | 'SCRUM' | 'DEPENDENCIES' | 'RESOURCES' | 'WEEKLY_STATUS';

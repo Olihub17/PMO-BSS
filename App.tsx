@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import { generateProjectAssets } from './geminiService';
 import { ProjectAssets, AssetType, Activity, RiskItem, HLDComponent, LLDComponent } from './types';
-import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView, ResourceDashboardView, ResourceProjectsView, DependencyView, ProjectResourcesView } from './components/AssetViews';
+import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView, ResourceDashboardView, ResourceProjectsView, DependencyView, ProjectResourcesView, WeeklyStatusView } from './components/AssetViews';
 import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo, Link2, Users } from 'lucide-react';
 
 // Dynamic imports
@@ -297,9 +297,64 @@ const App: React.FC = () => {
       currentY = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // 8. Risk Log
+    // 8. Weekly Status
+    if (type === 'FULL' || type === 'WEEKLY_STATUS') {
+      const status = assets.weeklyStatus || { headline: 'No status available', accomplishments: [], focusNextWeek: [] };
+      addTitle('8. Weekly Status Update');
+      
+      doc.setFontSize(11);
+      doc.setTextColor(30, 41, 59);
+      doc.setFont('Inter', 'bold');
+      doc.text('KEY HEADLINE:', 14, currentY);
+      currentY += 7;
+      
+      doc.setFontSize(10);
+      doc.setFont('Inter', 'normal');
+      doc.setTextColor(71, 85, 105);
+      const headlineLines = doc.splitTextToSize(status.headline, pageWidth - 28);
+      doc.text(headlineLines, 14, currentY);
+      currentY += (headlineLines.length * 5) + 10;
+
+      checkPage(40);
+      doc.setFontSize(11);
+      doc.setTextColor(30, 41, 59);
+      doc.setFont('Inter', 'bold');
+      doc.text('KEY ACCOMPLISHMENTS (LAST WEEK):', 14, currentY);
+      currentY += 7;
+      
+      doc.setFontSize(10);
+      doc.setFont('Inter', 'normal');
+      doc.setTextColor(71, 85, 105);
+      status.accomplishments.forEach(acc => {
+        checkPage(10);
+        const lines = doc.splitTextToSize(`• ${acc}`, pageWidth - 28);
+        doc.text(lines, 14, currentY);
+        currentY += (lines.length * 5) + 2;
+      });
+      currentY += 8;
+
+      checkPage(40);
+      doc.setFontSize(11);
+      doc.setTextColor(30, 41, 59);
+      doc.setFont('Inter', 'bold');
+      doc.text('FOCUS FOR NEXT WEEK:', 14, currentY);
+      currentY += 7;
+      
+      doc.setFontSize(10);
+      doc.setFont('Inter', 'normal');
+      doc.setTextColor(71, 85, 105);
+      status.focusNextWeek.forEach(focus => {
+        checkPage(10);
+        const lines = doc.splitTextToSize(`• ${focus}`, pageWidth - 28);
+        doc.text(lines, 14, currentY);
+        currentY += (lines.length * 5) + 2;
+      });
+      currentY += 15;
+    }
+
+    // 9. Risk Log
     if (type === 'FULL' || type === 'RISK_LOG') {
-      addTitle('8. Risk & Mitigation Log');
+      addTitle('9. Risk & Mitigation Log');
       const riskData = assets.riskLog.map(r => [r.id, r.category, r.description, r.impact, r.mitigation]);
       doc.autoTable({ 
         startY: currentY, 
@@ -311,14 +366,28 @@ const App: React.FC = () => {
       currentY = (doc as any).lastAutoTable.finalY + 15;
     }
 
-    // 9. Agile Backlog
+    // 10. Agile Backlog
     if (type === 'FULL' || type === 'BACKLOG') {
-      addTitle('9. Agile Product Backlog');
+      addTitle('10. Agile Product Backlog');
       const backlogData = (assets.backlog || []).map(b => [b.id, b.type, b.title, b.priority, b.status, b.estimate || '-']);
       doc.autoTable({ 
         startY: currentY, 
         head: [['ID', 'Type', 'Title', 'Priority', 'Status', 'Points']], 
         body: backlogData, 
+        headStyles: { fillColor: [79, 70, 229] },
+        styles: { fontSize: 8 }
+      });
+      currentY = (doc as any).lastAutoTable.finalY + 15;
+    }
+
+    // 11. Resource Allocation
+    if (type === 'FULL' || type === 'RESOURCES') {
+      addTitle('11. Resource Allocation Matrix');
+      const resData = (assets.resources || []).map(r => [r.id, r.name, r.role, r.availability + '%']);
+      doc.autoTable({ 
+        startY: currentY, 
+        head: [['ID', 'Name', 'Role', 'Availability']], 
+        body: resData, 
         headStyles: { fillColor: [79, 70, 229] },
         styles: { fontSize: 8 }
       });
@@ -496,6 +565,7 @@ const App: React.FC = () => {
                   { id: 'LLD', icon: <Terminal className="w-5 h-5" />, label: 'LLD' },
                   { id: 'ACTIVITIES', icon: <TableProperties className="w-5 h-5" />, label: 'Schedule' },
                   { id: 'ROADMAP', icon: <Calendar className="w-5 h-5" />, label: 'Roadmap' },
+                  { id: 'WEEKLY_STATUS', icon: <FileText className="w-5 h-5" />, label: 'Weekly Status' },
                   { id: 'DEPENDENCIES', icon: <Link2 className="w-5 h-5" />, label: 'Dependencies' },
                   { id: 'RESOURCES', icon: <Users className="w-5 h-5" />, label: 'Resources' },
                   { id: 'RISK_LOG', icon: <ShieldAlert className="w-5 h-5" />, label: 'Risks' },
@@ -547,6 +617,12 @@ const App: React.FC = () => {
                   />
                 )}
                 {activeTab === 'ROADMAP' && <RoadmapView phases={currentProject.roadmap} dependencies={currentProject.dependencies || []} onUpdate={(phases) => updateCurrentProject({ roadmap: phases })} onDownloadPDF={() => handleExportPDF('ROADMAP')} />}
+                {activeTab === 'WEEKLY_STATUS' && (
+                  <WeeklyStatusView 
+                    status={currentProject.weeklyStatus || { headline: '', accomplishments: [], focusNextWeek: [] }} 
+                    onUpdate={(status) => updateCurrentProject({ weeklyStatus: status })} 
+                  />
+                )}
                 {activeTab === 'DEPENDENCIES' && <DependencyView assets={currentProject} onUpdate={(deps) => updateCurrentProject({ dependencies: deps })} onDownloadPDF={() => handleExportPDF('DEPENDENCIES')} />}
                 {activeTab === 'RESOURCES' && (
                   <ProjectResourcesView 
