@@ -631,12 +631,21 @@ export const ActivityTableView: React.FC<{
   resources?: Resource[],
   dependencies?: ProjectDependency[],
   onUpdate: (activities: Activity[]) => void,
-  onDownloadPDF?: () => void
-}> = ({ activities, resources = [], dependencies = [], onUpdate, onDownloadPDF }) => {
+  onDownloadPDF?: () => void,
+  isReadOnly?: boolean,
+  currentUserEmail?: string
+}> = ({ activities, resources = [], dependencies = [], onUpdate, onDownloadPDF, isReadOnly, currentUserEmail }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showResourcePicker, setShowResourcePicker] = useState<string | null>(null);
 
   const handleCellEdit = (id: string, field: keyof Activity, value: any) => {
+    // If read-only, only allow status updates if assigned
+    if (isReadOnly) {
+      if (field !== 'status') return;
+      const act = activities.find(a => a.id === id);
+      const isAssigned = act?.assignedResources?.some(rId => resources.find(r => r.id === rId)?.email === currentUserEmail);
+      if (!isAssigned) return;
+    }
     onUpdate(activities.map(a => a.id === id ? { ...a, [field]: value } : a));
   };
 
@@ -703,13 +712,17 @@ export const ActivityTableView: React.FC<{
           <div className="flex flex-wrap gap-2">
             <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleExcelUpload} />
             
-            <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 rounded-2xl font-black text-xs border border-indigo-100 hover:bg-indigo-50 transition-all shadow-sm">
-              <FileUp className="w-4 h-4" /> Import Excel
-            </button>
-            
-            <button onClick={() => onUpdate([...activities, { id: `T-${activities.length + 1}`, task: 'New Manual Entry', startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], duration: 1, status: 'To Do' }])} className="px-5 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 shadow-lg active:scale-95 transition-all">
-              Add Row
-            </button>
+            {!isReadOnly && (
+              <>
+                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 rounded-2xl font-black text-xs border border-indigo-100 hover:bg-indigo-50 transition-all shadow-sm">
+                  <FileUp className="w-4 h-4" /> Import Excel
+                </button>
+                
+                <button onClick={() => onUpdate([...activities, { id: `T-${activities.length + 1}`, task: 'New Manual Entry', startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], duration: 1, status: 'To Do' }])} className="px-5 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 shadow-lg active:scale-95 transition-all">
+                  Add Row
+                </button>
+              </>
+            )}
           </div>
         </div>
       <div className="overflow-x-auto">
@@ -739,10 +752,11 @@ export const ActivityTableView: React.FC<{
                   <td className="px-6 py-4 font-mono text-[10px] text-slate-400 font-bold">{act.id}</td>
                   <td className="px-6 py-4">
                     <input 
-                      className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-200"
+                      className={`w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-800 placeholder:text-slate-200 ${isReadOnly ? 'cursor-not-allowed' : ''}`}
                       value={act.task}
                       placeholder="Describe the task..."
                       onChange={(e) => handleCellEdit(act.id, 'task', e.target.value)}
+                      readOnly={isReadOnly}
                     />
                   </td>
                   <td className="px-6 py-4">
@@ -750,9 +764,10 @@ export const ActivityTableView: React.FC<{
                       className={`border-none rounded-xl text-[10px] font-black uppercase px-3 py-1.5 outline-none shadow-sm transition-all ${
                         act.status === 'Done' ? 'bg-emerald-100 text-emerald-700' : 
                         act.status === 'In Progress' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500'
-                      }`}
+                      } ${isReadOnly && !act.assignedResources?.some(rId => resources.find(r => r.id === rId)?.email === currentUserEmail) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                       value={act.status}
                       onChange={(e) => handleCellEdit(act.id, 'status', e.target.value)}
+                      disabled={isReadOnly && !act.assignedResources?.some(rId => resources.find(r => r.id === rId)?.email === currentUserEmail)}
                     >
                       <option value="To Do">To Do</option>
                       <option value="In Progress">In Progress</option>
@@ -763,12 +778,12 @@ export const ActivityTableView: React.FC<{
                      <div className="flex items-center gap-3">
                        <div className="flex flex-col">
                          <label className="text-[8px] font-black text-slate-300 uppercase">Start Date</label>
-                         <input type="date" value={act.startDate} onChange={(e) => handleCellEdit(act.id, 'startDate', e.target.value)} className="bg-transparent border-none text-[10px] p-0 font-bold text-slate-500 w-24 focus:ring-0" />
+                         <input type="date" value={act.startDate} onChange={(e) => handleCellEdit(act.id, 'startDate', e.target.value)} className={`bg-transparent border-none text-[10px] p-0 font-bold text-slate-500 w-24 focus:ring-0 ${isReadOnly ? 'cursor-not-allowed' : ''}`} readOnly={isReadOnly} />
                        </div>
                        <div className="w-px h-6 bg-slate-200"></div>
                        <div className="flex flex-col">
                          <label className="text-[8px] font-black text-slate-300 uppercase">Days</label>
-                         <input type="number" value={act.duration} onChange={(e) => handleCellEdit(act.id, 'duration', parseInt(e.target.value) || 0)} className="bg-transparent border-none text-[10px] p-0 font-bold text-slate-400 w-8 focus:ring-0" />
+                         <input type="number" value={act.duration} onChange={(e) => handleCellEdit(act.id, 'duration', parseInt(e.target.value) || 0)} className={`bg-transparent border-none text-[10px] p-0 font-bold text-slate-400 w-8 focus:ring-0 ${isReadOnly ? 'cursor-not-allowed' : ''}`} readOnly={isReadOnly} />
                        </div>
                      </div>
                   </td>
@@ -794,8 +809,9 @@ export const ActivityTableView: React.FC<{
                   <td className="px-6 py-4">
                   <div className="relative">
                     <button 
-                      onClick={() => setShowResourcePicker(showResourcePicker === act.id ? null : act.id)}
-                      className="flex -space-x-2 hover:opacity-80 transition-opacity"
+                      onClick={() => !isReadOnly && setShowResourcePicker(showResourcePicker === act.id ? null : act.id)}
+                      className={`flex -space-x-2 transition-opacity ${isReadOnly ? 'cursor-not-allowed' : 'hover:opacity-80'}`}
+                      disabled={isReadOnly}
                     >
                       {(act.assignedResources || []).length > 0 ? (
                         act.assignedResources?.map(rId => {
@@ -842,7 +858,18 @@ export const ActivityTableView: React.FC<{
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <button onClick={() => onUpdate(activities.filter(a => a.id !== act.id))} className="p-2 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"><Trash2 className="w-5 h-5" /></button>
+                  {!isReadOnly ? (
+                    <button 
+                      onClick={() => onUpdate(activities.filter(a => a.id !== act.id))} 
+                      className="p-2 text-slate-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  ) : (
+                    <div className="p-2 text-slate-200">
+                      <Lock className="w-4 h-4" />
+                    </div>
+                  )}
                 </td>
               </tr>
             );

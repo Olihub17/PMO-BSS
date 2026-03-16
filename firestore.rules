@@ -1,0 +1,103 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId}
+// Fields:
+//   - uid: string (required)
+//   - email: string (required, email format)
+//   - name: string (required)
+//   - role: string (required, 'admin' | 'resource')
+//
+// Collection: projects
+// Document ID: {projectId}
+// Fields:
+//   - id: string (required)
+//   - metadata: map (required)
+//   - summary: string
+//   - wbs: list
+//   - hld: list
+//   - lld: list
+//   - roadmap: list
+//   - activities: list
+//   - riskLog: list
+//   - backlog: list
+//   - sprints: list
+//   - resources: list
+//   - assignedEmails: list (strings)
+//   - dependencies: list
+//   - weeklyStatus: map
+//   - lastUpdated: string
+//   - isArchived: bool
+//   - ownerId: string (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         (request.auth.token.email == "oliver.nabil17@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isAssignedToProject(projectData) {
+      return isAuthenticated() && 
+        (projectData.ownerId == request.auth.uid || 
+         (request.auth.token.email in projectData.assignedEmails));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return data.keys().hasOnly(['uid', 'email', 'name', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && data.email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$") &&
+             data.name is string && data.name.size() > 0 &&
+             data.role in ['admin', 'resource'];
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['id', 'metadata', 'ownerId']) &&
+             data.id is string &&
+             data.ownerId is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.role == 'resource' || isAdmin());
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
+                    (request.resource.data.role == resource.data.role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAdmin() || isAssignedToProject(resource.data);
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isAssignedToProject(resource.data) && isValidProject(request.resource.data));
+      allow delete: if isAdmin();
+    }
+  }
+}

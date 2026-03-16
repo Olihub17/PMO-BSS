@@ -4,7 +4,10 @@ import Layout from './components/Layout';
 import { generateProjectAssets } from './geminiService';
 import { ProjectAssets, AssetType, Activity, RiskItem, HLDComponent, LLDComponent } from './types';
 import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView, ResourceDashboardView, ResourceProjectsView, DependencyView, ProjectResourcesView, WeeklyStatusView } from './components/AssetViews';
-import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo, Link2, Users } from 'lucide-react';
+import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo, Link2, Users, LogOut, Lock } from 'lucide-react';
+import { auth, db, signIn, logout, UserProfile } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, query, where, getDoc } from 'firebase/firestore';
 
 // Dynamic imports
 import * as PDFJS from 'pdfjs-dist';
@@ -22,6 +25,8 @@ const STORAGE_KEY = 'bssconnects_projects';
 const App: React.FC = () => {
   const [step, setStep] = useState<AppStep>('GLOBAL_DASHBOARD');
   const [projects, setProjects] = useState<ProjectAssets[]>([]);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
   const [requirements, setRequirements] = useState('');
@@ -32,23 +37,65 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
-  // Persistence
+  // Firebase Auth & Data Sync
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setProjects(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to load projects", e);
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          setUser(userSnap.data() as UserProfile);
+        } else {
+          // Fallback if profile wasn't created during signIn call
+          const profile: UserProfile = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email || '',
+            name: firebaseUser.displayName || 'User',
+            role: firebaseUser.email === 'oliver.nabil17@gmail.com' ? 'admin' : 'resource'
+          };
+          await setDoc(userRef, profile);
+          setUser(profile);
+        }
+      } else {
+        setUser(null);
       }
-    }
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribeAuth();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
-  }, [projects]);
+    if (!user) {
+      setProjects([]);
+      return;
+    }
+
+    let q;
+    if (user.role === 'admin') {
+      q = collection(db, 'projects');
+    } else {
+      q = query(collection(db, 'projects'), where('assignedEmails', 'array-contains', user.email));
+    }
+
+    const unsubscribeProjects = onSnapshot(q, (snapshot) => {
+      const projs = snapshot.docs.map(doc => doc.data() as ProjectAssets);
+      setProjects(projs);
+    });
+
+    return () => unsubscribeProjects();
+  }, [user]);
 
   const currentProject = projects.find(p => p.id === currentProjectId);
+
+  const handleLogin = async () => {
+    try {
+      await signIn();
+    } catch (err) {
+      console.error(err);
+      setError('Login failed.');
+    }
+  };
 
   const extractTextFromPDF = async (arrayBuffer: ArrayBuffer): Promise<string> => {
     const loadingTask = PDFJS.getDocument({ data: arrayBuffer });
@@ -101,7 +148,7 @@ const App: React.FC = () => {
   };
 
   const handleGenerate = async () => {
-    if (!requirements.trim()) { setError('Provide requirements.'); return; }
+    if (!requirements.trim() || !user) { setError('Provide requirements.'); return; }
     setError(null);
     setIsProcessing(true);
     try {
@@ -109,8 +156,10 @@ const App: React.FC = () => {
       // Inject unique IDs for HLD/LLD
       result.hld = result.hld.map(h => ({ ...h, id: crypto.randomUUID() }));
       result.lld = result.lld.map(l => ({ ...l, id: crypto.randomUUID() }));
+      result.ownerId = user.uid;
+      result.assignedEmails = [];
       
-      setProjects(prev => [...prev, result]);
+      await setDoc(doc(db, 'projects', result.id), result);
       setCurrentProjectId(result.id);
       setStep('RESULTS');
       setActiveTab('DASHBOARD');
@@ -125,25 +174,81 @@ const App: React.FC = () => {
     }
   };
 
-  const updateCurrentProject = (updates: Partial<ProjectAssets>) => {
-    if (!currentProjectId) return;
-    setProjects(prev => prev.map(p => p.id === currentProjectId ? { ...p, ...updates, lastUpdated: new Date().toISOString() } : p));
+  const updateCurrentProject = async (updates: Partial<ProjectAssets>) => {
+    if (!currentProjectId || !user) return;
+    
+    // Check if resource is trying to update something they shouldn't
+    if (user.role === 'resource') {
+      const allowedKeys = ['activities', 'backlog', 'weeklyStatus'];
+      const keys = Object.keys(updates);
+      if (keys.some(k => !allowedKeys.includes(k))) {
+        setError('Limited authority: You can only update activities, backlog, or status.');
+        return;
+      }
+    }
+
+    try {
+      await updateDoc(doc(db, 'projects', currentProjectId), {
+        ...updates,
+        lastUpdated: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error(err);
+      setError('Failed to update project.');
+    }
   };
 
-  const deleteProject = (id: string, e: React.MouseEvent) => {
+  const deleteProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (user?.role !== 'admin') {
+      setError('Only admins can delete projects.');
+      return;
+    }
     if (confirm("Are you sure?")) {
-      setProjects(prev => prev.filter(p => p.id !== id));
-      if (currentProjectId === id) {
-        setCurrentProjectId(null);
-        setStep('GLOBAL_DASHBOARD');
+      try {
+        await deleteDoc(doc(db, 'projects', id));
+        if (currentProjectId === id) {
+          setCurrentProjectId(null);
+          setStep('GLOBAL_DASHBOARD');
+        }
+      } catch (err) {
+        console.error(err);
+        setError('Failed to delete project.');
       }
     }
   };
 
-  const toggleArchiveProject = (id: string, e: React.MouseEvent) => {
+  const toggleArchiveProject = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, isArchived: !p.isArchived, lastUpdated: new Date().toISOString() } : p));
+    const proj = projects.find(p => p.id === id);
+    if (!proj) return;
+    try {
+      await updateDoc(doc(db, 'projects', id), {
+        isArchived: !proj.isArchived,
+        lastUpdated: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error(err);
+      setError('Failed to archive project.');
+    }
+  };
+
+  const notifyResource = async (email: string, projectName: string, taskName?: string) => {
+    try {
+      await fetch('/api/notify-resource', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          projectName,
+          taskName,
+          role: 'Resource',
+          projectUrl: window.location.origin
+        })
+      });
+    } catch (err) {
+      console.error("Failed to send notification", err);
+    }
   };
 
   const handleExportPDF = (type: AssetType | 'FULL' = 'FULL') => {
@@ -398,9 +503,57 @@ const App: React.FC = () => {
     doc.save(fileName);
   };
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-full max-w-md space-y-8">
+          <div className="space-y-4">
+            <div className="inline-flex p-4 bg-white rounded-[32px] shadow-2xl shadow-indigo-100 border border-slate-100">
+              <img 
+                src="/logo.svg" 
+                alt="BSS-PMO Logo" 
+                className="w-16 h-16 object-contain" 
+                onError={(e) => {
+                  e.currentTarget.src = 'https://api.dicebear.com/7.x/initials/svg?seed=BSS&backgroundColor=4f46e5';
+                }}
+              />
+            </div>
+            <h1 className="text-4xl font-black text-slate-900">BSS-PMO <span className="text-indigo-600">Architect</span></h1>
+            <p className="text-slate-500">Secure access to the Solution Architecture & PMO Infrastructure.</p>
+          </div>
+          
+          <button 
+            onClick={handleLogin}
+            className="w-full bg-white border border-slate-200 p-6 rounded-[32px] flex items-center justify-center gap-4 hover:bg-slate-50 transition-all shadow-xl shadow-indigo-100 group"
+          >
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+              <User className="w-6 h-6" />
+            </div>
+            <div className="text-left">
+              <div className="text-sm font-black text-slate-900">Sign in with Google</div>
+              <div className="text-xs text-slate-400 font-bold uppercase tracking-widest">Enterprise Authentication</div>
+            </div>
+          </button>
+          
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Authorized Personnel Only</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Layout 
       activeView={sidebarView}
+      user={user}
+      onLogout={logout}
       onViewChange={(view) => {
         setSidebarView(view);
         setStep('GLOBAL_DASHBOARD');
@@ -612,7 +765,33 @@ const App: React.FC = () => {
                     activities={currentProject.activities} 
                     resources={currentProject.resources || []}
                     dependencies={currentProject.dependencies || []}
-                    onUpdate={(a) => updateCurrentProject({ activities: a })} 
+                    isReadOnly={user?.role === 'resource'}
+                    currentUserEmail={user?.email || ''}
+                    onUpdate={(a) => {
+                      // Check for new assignments to trigger email
+                      const oldActivities = currentProject.activities;
+                      a.forEach(newAct => {
+                        const oldAct = oldActivities.find(oa => oa.id === newAct.id);
+                        const newResources = newAct.assignedResources || [];
+                        const oldResources = oldAct?.assignedResources || [];
+                        
+                        // Find newly added resources
+                        const added = newResources.filter(rId => !oldResources.includes(rId));
+                        added.forEach(rId => {
+                          const resource = currentProject.resources.find(r => r.id === rId);
+                          if (resource && resource.email) {
+                            notifyResource(resource.email, currentProject.metadata.projectName, newAct.task);
+                          }
+                        });
+                      });
+
+                      // Update assignedEmails for security rules
+                      const allAssignedEmails = Array.from(new Set(
+                        a.flatMap(act => (act.assignedResources || []).map(rId => currentProject.resources.find(r => r.id === rId)?.email).filter(Boolean))
+                      )) as string[];
+
+                      updateCurrentProject({ activities: a, assignedEmails: allAssignedEmails });
+                    }} 
                     onDownloadPDF={() => handleExportPDF('ACTIVITIES')} 
                   />
                 )}

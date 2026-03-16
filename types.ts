@@ -121,6 +121,8 @@ export interface ProjectAssets {
   backlog: BacklogItem[];
   sprints: Sprint[];
   resources: Resource[];
+  assignedEmails: string[];
+  ownerId: string;
   dependencies: ProjectDependency[];
   weeklyStatus?: WeeklyStatus;
   lastUpdated: string;

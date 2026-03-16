@@ -1,14 +1,17 @@
 
 import React from 'react';
-import { LayoutDashboard, FileText, Settings, HelpCircle, Rocket, Users, Briefcase } from 'lucide-react';
+import { LayoutDashboard, FileText, Settings, HelpCircle, Rocket, Users, Briefcase, LogOut, User } from 'lucide-react';
+import { UserProfile } from '../firebase';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeView?: 'dashboard' | 'projects' | 'resource_dashboard' | 'resource_projects';
   onViewChange?: (view: 'dashboard' | 'projects' | 'resource_dashboard' | 'resource_projects') => void;
+  user?: UserProfile | null;
+  onLogout?: () => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeView = 'dashboard', onViewChange }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeView = 'dashboard', onViewChange, user, onLogout }) => {
   return (
     <div className="min-h-screen flex bg-slate-50 overflow-hidden">
       {/* Sidebar */}
@@ -82,6 +85,26 @@ const Layout: React.FC<LayoutProps> = ({ children, activeView = 'dashboard', onV
         </nav>
 
         <div className="p-4 border-t border-slate-800 space-y-1">
+          {user && (
+            <div className="px-4 py-3 mb-2 bg-slate-800/50 rounded-xl border border-slate-700/50">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-xs font-bold text-white uppercase">
+                  {user.name.charAt(0)}
+                </div>
+                <div className="overflow-hidden">
+                  <div className="text-xs font-bold text-white truncate">{user.name}</div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{user.role}</div>
+                </div>
+              </div>
+            </div>
+          )}
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-slate-400 hover:bg-red-900/20 hover:text-red-400 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+            <span>Sign Out</span>
+          </button>
           <a href="#" className="flex items-center gap-3 px-4 py-2 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors">
             <Settings className="w-5 h-5" />
             <span>Settings</span>
