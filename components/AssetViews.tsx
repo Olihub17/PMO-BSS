@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType, ProjectDependency, WeeklyStatus } from '../types';
-import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical, FileText } from 'lucide-react';
+import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType, ProjectDependency, WeeklyStatus, MoMEntry } from '../types';
+import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical, FileText, Loader2, Wand2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -24,6 +24,57 @@ export const WeeklyStatusView: React.FC<{
 
   const removeItem = (field: 'accomplishments' | 'focusNextWeek', index: number) => {
     onUpdate({ ...status, [field]: status[field].filter((_, i) => i !== index) });
+  };
+
+  const addMoM = () => {
+    const newMoM: MoMEntry = {
+      id: crypto.randomUUID(),
+      date: new Date().toISOString().split('T')[0],
+      attendance: [],
+      actionPoints: []
+    };
+    onUpdate({ ...status, mom: [...(status.mom || []), newMoM] });
+  };
+
+  const updateMoM = (id: string, updates: Partial<MoMEntry>) => {
+    onUpdate({
+      ...status,
+      mom: status.mom?.map(m => m.id === id ? { ...m, ...updates } : m)
+    });
+  };
+
+  const removeMoM = (id: string) => {
+    onUpdate({
+      ...status,
+      mom: status.mom?.filter(m => m.id !== id)
+    });
+  };
+
+  const addActionPoint = (momId: string) => {
+    const mom = status.mom?.find(m => m.id === momId);
+    if (!mom) return;
+    const newActionPoint = {
+      point: '',
+      owner: '',
+      deadline: '',
+      status: 'Open' as const
+    };
+    updateMoM(momId, { actionPoints: [...mom.actionPoints, newActionPoint] });
+  };
+
+  const updateActionPoint = (momId: string, index: number, updates: any) => {
+    const mom = status.mom?.find(m => m.id === momId);
+    if (!mom) return;
+    const newActionPoints = [...mom.actionPoints];
+    newActionPoints[index] = { ...newActionPoints[index], ...updates };
+    updateMoM(momId, { actionPoints: newActionPoints });
+  };
+
+  const removeActionPoint = (momId: string, index: number) => {
+    const mom = status.mom?.find(m => m.id === momId);
+    if (!mom) return;
+    const newActionPoints = mom.actionPoints.filter((_, i) => i !== index);
+    updateMoM(momId, { actionPoints: newActionPoints });
   };
 
   return (
@@ -101,6 +152,147 @@ export const WeeklyStatusView: React.FC<{
                 <p className="text-slate-400 text-xs italic">No focus areas added yet.</p>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Minutes of Meeting (MoM) Section */}
+        <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h3 className="text-xl font-black text-slate-900">Minutes of <span className="text-indigo-600">Meeting (MoM)</span></h3>
+              <p className="text-xs text-slate-400 mt-1 font-medium">Track meeting outcomes and action points</p>
+            </div>
+            <button 
+              onClick={addMoM}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-sm"
+            >
+              <Plus className="w-4 h-4" /> Add Meeting
+            </button>
+          </div>
+
+          <div className="space-y-8">
+            {status.mom?.map((entry) => (
+              <div key={entry.id} className="border border-slate-100 rounded-2xl p-6 bg-slate-50/50 relative group">
+                <button 
+                  onClick={() => removeMoM(entry.id)}
+                  className="absolute top-4 right-4 p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Meeting Date</label>
+                    <input 
+                      type="date"
+                      className="w-full bg-white border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      value={entry.date}
+                      onChange={(e) => updateMoM(entry.id, { date: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Attendance (Comma separated)</label>
+                    <input 
+                      type="text"
+                      className="w-full bg-white border border-slate-100 rounded-xl p-3 text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                      value={entry.attendance.join(', ')}
+                      onChange={(e) => updateMoM(entry.id, { attendance: e.target.value.split(',').map(s => s.trim()) })}
+                      placeholder="e.g. John Doe, Jane Smith"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Action Points</label>
+                    <button 
+                      onClick={() => addActionPoint(entry.id)}
+                      className="text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:text-indigo-700 transition-colors"
+                    >
+                      <Plus className="w-3 h-3 inline mr-1" /> Add Point
+                    </button>
+                  </div>
+
+                  <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-50 text-slate-400 text-[9px] font-black uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-3 border-b border-slate-100">Action Point</th>
+                          <th className="px-4 py-3 border-b border-slate-100 w-32">Owner</th>
+                          <th className="px-4 py-3 border-b border-slate-100 w-32">Deadline</th>
+                          <th className="px-4 py-3 border-b border-slate-100 w-24">Status</th>
+                          <th className="px-4 py-3 border-b border-slate-100 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {entry.actionPoints.map((ap, apIdx) => (
+                          <tr key={apIdx} className="group/row">
+                            <td className="px-4 py-3">
+                              <input 
+                                className="w-full bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-700 p-0"
+                                value={ap.point}
+                                onChange={(e) => updateActionPoint(entry.id, apIdx, { point: e.target.value })}
+                                placeholder="Describe action..."
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input 
+                                className="w-full bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-700 p-0"
+                                value={ap.owner}
+                                onChange={(e) => updateActionPoint(entry.id, apIdx, { owner: e.target.value })}
+                                placeholder="Owner"
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <input 
+                                type="date"
+                                className="w-full bg-transparent border-none focus:ring-0 text-xs font-medium text-slate-700 p-0"
+                                value={ap.deadline}
+                                onChange={(e) => updateActionPoint(entry.id, apIdx, { deadline: e.target.value })}
+                              />
+                            </td>
+                            <td className="px-4 py-3">
+                              <select 
+                                className="w-full bg-transparent border-none focus:ring-0 text-[10px] font-black uppercase tracking-widest text-slate-500 p-0 cursor-pointer"
+                                value={ap.status}
+                                onChange={(e) => updateActionPoint(entry.id, apIdx, { status: e.target.value })}
+                              >
+                                <option value="Open">Open</option>
+                                <option value="Closed">Closed</option>
+                              </select>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button 
+                                onClick={() => removeActionPoint(entry.id, apIdx)}
+                                className="opacity-0 group-hover/row:opacity-100 text-slate-300 hover:text-red-500 transition-all"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {entry.actionPoints.length === 0 && (
+                          <tr>
+                            <td colSpan={5} className="px-4 py-8 text-center text-slate-300 text-[10px] italic font-medium">
+                              No action points added to this meeting.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {(!status.mom || status.mom.length === 0) && (
+              <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-[32px]">
+                <div className="bg-slate-50 w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Calendar className="w-6 h-6 text-slate-300" />
+                </div>
+                <p className="text-slate-400 text-sm font-medium">No meeting minutes recorded yet.</p>
+                <button onClick={addMoM} className="text-indigo-600 text-xs font-black uppercase tracking-widest mt-2 hover:text-indigo-700">Add First Meeting</button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -632,10 +824,13 @@ export const ActivityTableView: React.FC<{
   dependencies?: ProjectDependency[],
   onUpdate: (activities: Activity[]) => void,
   onDownloadPDF?: () => void,
+  onSuperAnalysis?: (excelData: Record<string, any[]>) => void,
   isReadOnly?: boolean,
-  currentUserEmail?: string
-}> = ({ activities, resources = [], dependencies = [], onUpdate, onDownloadPDF, isReadOnly, currentUserEmail }) => {
+  currentUserEmail?: string,
+  isProcessing?: boolean
+}> = ({ activities, resources = [], dependencies = [], onUpdate, onDownloadPDF, onSuperAnalysis, isReadOnly, currentUserEmail, isProcessing }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const superAnalysisInputRef = useRef<HTMLInputElement>(null);
   const [showResourcePicker, setShowResourcePicker] = useState<string | null>(null);
 
   const handleCellEdit = (id: string, field: keyof Activity, value: any) => {
@@ -666,28 +861,39 @@ export const ActivityTableView: React.FC<{
     return dependencies.filter(d => d.sourceActivityId === activityId || d.targetActivityId === activityId);
   };
 
-  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>, isSuper: boolean = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
       const wb = XLSX.read(bstr, { type: 'binary' });
-      const wsname = wb.SheetNames[0];
-      const ws = wb.Sheets[wsname];
-      const data: any[] = XLSX.utils.sheet_to_json(ws);
       
-      const newActivities: Activity[] = data.map((row, i) => ({
-        id: row.id || row.ID || `T-${activities.length + i + 1}`,
-        task: row.task || row.Activity || row.Task || 'Imported Task',
-        startDate: row.startDate || row.Start || new Date().toISOString().split('T')[0],
-        endDate: row.endDate || row.End || new Date().toISOString().split('T')[0],
-        duration: parseInt(row.duration || row.Days || row.Duration) || 1,
-        status: (row.status || row.Status || 'To Do') as any,
-      }));
-      onUpdate([...activities, ...newActivities]);
+      const allSheetsData: Record<string, any[]> = {};
+      wb.SheetNames.forEach(name => {
+        allSheetsData[name] = XLSX.utils.sheet_to_json(wb.Sheets[name]);
+      });
+
+      if (isSuper && onSuperAnalysis) {
+        onSuperAnalysis(allSheetsData);
+      } else {
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data: any[] = XLSX.utils.sheet_to_json(ws);
+        
+        const newActivities: Activity[] = data.map((row, i) => ({
+          id: row.id || row.ID || `T-${activities.length + i + 1}`,
+          task: row.task || row.Activity || row.Task || 'Imported Task',
+          startDate: row.startDate || row.Start || new Date().toISOString().split('T')[0],
+          endDate: row.endDate || row.End || new Date().toISOString().split('T')[0],
+          duration: parseInt(row.duration || row.Days || row.Duration) || 1,
+          status: (row.status || row.Status || 'To Do') as any,
+        }));
+        onUpdate([...activities, ...newActivities]);
+      }
     };
     reader.readAsBinaryString(file);
+    e.target.value = '';
   };
 
   return (
@@ -710,12 +916,25 @@ export const ActivityTableView: React.FC<{
              </div>
           </div>
           <div className="flex flex-wrap gap-2">
-            <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={handleExcelUpload} />
+            <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={(e) => handleExcelUpload(e, false)} />
+            <input type="file" ref={superAnalysisInputRef} className="hidden" accept=".xlsx,.xls" onChange={(e) => handleExcelUpload(e, true)} />
             
             {!isReadOnly && (
               <>
-                <button onClick={() => fileInputRef.current?.click()} className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 rounded-2xl font-black text-xs border border-indigo-100 hover:bg-indigo-50 transition-all shadow-sm">
+                <button 
+                  onClick={() => fileInputRef.current?.click()} 
+                  className="flex items-center gap-2 px-5 py-3 bg-white text-indigo-700 rounded-2xl font-black text-xs border border-indigo-100 hover:bg-indigo-50 transition-all shadow-sm"
+                >
                   <FileUp className="w-4 h-4" /> Import Excel
+                </button>
+
+                <button 
+                  onClick={() => superAnalysisInputRef.current?.click()} 
+                  disabled={isProcessing}
+                  className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs border border-indigo-500 hover:bg-indigo-700 transition-all shadow-md disabled:opacity-50"
+                >
+                  {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                  Super Analysis (All Sheets)
                 </button>
                 
                 <button onClick={() => onUpdate([...activities, { id: `T-${activities.length + 1}`, task: 'New Manual Entry', startDate: new Date().toISOString().split('T')[0], endDate: new Date().toISOString().split('T')[0], duration: 1, status: 'To Do' }])} className="px-5 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 shadow-lg active:scale-95 transition-all">

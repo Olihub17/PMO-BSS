@@ -97,10 +97,23 @@ export interface ProjectDependency {
   status: 'Identified' | 'Resolved' | 'At Risk';
 }
 
+export interface MoMEntry {
+  id: string;
+  date: string;
+  attendance: string[];
+  actionPoints: {
+    point: string;
+    owner: string;
+    deadline: string;
+    status: 'Open' | 'Closed';
+  }[];
+}
+
 export interface WeeklyStatus {
   headline: string;
   accomplishments: string[];
   focusNextWeek: string[];
+  mom?: MoMEntry[];
 }
 
 export interface ProjectAssets {

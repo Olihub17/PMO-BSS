@@ -162,7 +162,32 @@ const ASSET_SCHEMA = {
       properties: {
         headline: { type: Type.STRING },
         accomplishments: { type: Type.ARRAY, items: { type: Type.STRING } },
-        focusNextWeek: { type: Type.ARRAY, items: { type: Type.STRING } }
+        focusNextWeek: { type: Type.ARRAY, items: { type: Type.STRING } },
+        mom: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              id: { type: Type.STRING },
+              date: { type: Type.STRING },
+              attendance: { type: Type.ARRAY, items: { type: Type.STRING } },
+              actionPoints: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    point: { type: Type.STRING },
+                    owner: { type: Type.STRING },
+                    deadline: { type: Type.STRING },
+                    status: { type: Type.STRING, enum: ["Open", "Closed"] }
+                  },
+                  required: ["point", "owner", "deadline", "status"]
+                }
+              }
+            },
+            required: ["id", "date", "attendance", "actionPoints"]
+          }
+        }
       },
       required: ["headline", "accomplishments", "focusNextWeek"]
     }
@@ -189,7 +214,45 @@ export async function generateProjectAssets(projectName: string, content: string
       5. Sprints: Propose a set of 2-3 initial sprints (Planned status) to kick off the project.
       6. Professional Tone: Technical formal English.
       5. Metadata: Set Prepared by: Team, Organization: BSSconnects.
-      6. Weekly Status: Provide a high-level summary headline, 3-5 key accomplishments from the last week based on the project scope, and 3-5 focus areas for the next week.
+      6. Weekly Status: Provide a high-level summary headline, 3-5 key accomplishments from the last week based on the project scope, 3-5 focus areas for the next week, and a list of 1-2 initial Minutes of Meeting (MoM) entries if relevant to the requirements.
+      
+      Strictly adhere to the JSON responseSchema.`,
+      responseMimeType: "application/json",
+      responseSchema: ASSET_SCHEMA,
+    },
+  });
+
+  const jsonStr = response.text?.trim() || '{}';
+  const data = JSON.parse(jsonStr);
+  return {
+    ...data,
+    id: crypto.randomUUID(),
+    lastUpdated: new Date().toISOString()
+  } as ProjectAssets;
+}
+
+export async function analyzeExcelDocument(projectName: string, excelData: Record<string, any[]>): Promise<ProjectAssets> {
+  const content = Object.entries(excelData)
+    .map(([sheetName, rows]) => `Sheet: ${sheetName}\nData: ${JSON.stringify(rows)}`)
+    .join('\n\n');
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Project Name: ${projectName}\nExcel Data Content:\n${content}`,
+    config: {
+      systemInstruction: `You are a Senior PMO Director and Solution Architect at BSSconnects. 
+      Your expertise: SDLC and Telecom Infrastructure (BSS/OSS/Core).
+      Objective: Perform a SUPER ANALYSIS on the provided Excel data which contains multiple sheets.
+      
+      Requirements for BSSconnects output:
+      1. Analyze ALL sheets provided. Some might contain requirements, some might contain schedules, some might contain risks or technical specs.
+      2. Synthesize all this information into a cohesive set of PMO assets.
+      3. HLD/LLD: Focus on system architecture, API integration, and backend synchronization. 
+      4. WBS: Deconstruct into logical Phases/Sprints compatible with MS Project. Map every task back to a Requirement ID.
+      5. Risk Log: Categorize into Technical, Regulatory (KYC/ARCEP), and Operational. 
+      6. Agile Backlog: Generate a comprehensive backlog of User Stories and Tasks.
+      7. Sprints: Propose initial sprints.
+      8. Weekly Status: Provide a high-level summary headline, accomplishments, focus areas, and synthesized Minutes of Meeting (MoM) from any meeting notes found in the Excel sheets.
       
       Strictly adhere to the JSON responseSchema.`,
       responseMimeType: "application/json",

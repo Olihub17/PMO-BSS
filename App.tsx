@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
-import { generateProjectAssets } from './geminiService';
+import { generateProjectAssets, analyzeExcelDocument } from './geminiService';
 import { ProjectAssets, AssetType, Activity, RiskItem, HLDComponent, LLDComponent } from './types';
 import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView, ResourceDashboardView, ResourceProjectsView, DependencyView, ProjectResourcesView, WeeklyStatusView } from './components/AssetViews';
 import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo, Link2, Users, LogOut, Lock } from 'lucide-react';
@@ -94,6 +94,36 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       setError('Login failed.');
+    }
+  };
+
+  const handleSuperAnalysis = async (excelData: Record<string, any[]>) => {
+    if (!currentProject || !user || !currentProjectId) return;
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const result = await analyzeExcelDocument(currentProject.metadata.projectName, excelData);
+      
+      // Inject unique IDs for HLD/LLD
+      const hldWithIds = result.hld.map(h => ({ ...h, id: crypto.randomUUID() }));
+      const lldWithIds = result.lld.map(l => ({ ...l, id: crypto.randomUUID() }));
+      
+      // Update the existing project with the analyzed data
+      // We merge it with existing metadata and keep the same ID/owner
+      await setDoc(doc(db, 'projects', currentProjectId), {
+        ...result,
+        id: currentProjectId,
+        hld: hldWithIds,
+        lld: lldWithIds,
+        ownerId: currentProject.ownerId,
+        assignedEmails: currentProject.assignedEmails || [],
+        lastUpdated: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error(err);
+      setError('Super Analysis failed.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -767,6 +797,8 @@ const App: React.FC = () => {
                     dependencies={currentProject.dependencies || []}
                     isReadOnly={user?.role === 'resource'}
                     currentUserEmail={user?.email || ''}
+                    isProcessing={isProcessing}
+                    onSuperAnalysis={handleSuperAnalysis}
                     onUpdate={(a) => {
                       // Check for new assignments to trigger email
                       const oldActivities = currentProject.activities;
