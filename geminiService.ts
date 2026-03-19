@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ProjectAssets } from "./types";
+import { ProjectAssets, WBSItem } from "./types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -247,12 +247,13 @@ export async function analyzeExcelDocument(projectName: string, excelData: Recor
       Requirements for BSSconnects output:
       1. Analyze ALL sheets provided. Some might contain requirements, some might contain schedules, some might contain risks or technical specs.
       2. Synthesize all this information into a cohesive set of PMO assets.
-      3. HLD/LLD: Focus on system architecture, API integration, and backend synchronization. 
-      4. WBS: Deconstruct into logical Phases/Sprints compatible with MS Project. Map every task back to a Requirement ID.
-      5. Risk Log: Categorize into Technical, Regulatory (KYC/ARCEP), and Operational. 
-      6. Agile Backlog: Generate a comprehensive backlog of User Stories and Tasks.
-      7. Sprints: Propose initial sprints.
-      8. Weekly Status: Provide a high-level summary headline, accomplishments, focus areas, and synthesized Minutes of Meeting (MoM) from any meeting notes found in the Excel sheets.
+      3. Schedule/Activities: If any sheet looks like a project schedule (Gantt, Task List, Milestone plan), prioritize extracting those tasks accurately. Map columns like "Work Item", "Start Date", "End Date", "Duration", and "Owner" to the activities schema.
+      4. HLD/LLD: Focus on system architecture, API integration, and backend synchronization. 
+      5. WBS: Deconstruct into logical Phases/Sprints compatible with MS Project. Map every task back to a Requirement ID.
+      6. Risk Log: Categorize into Technical, Regulatory (KYC/ARCEP), and Operational. 
+      7. Agile Backlog: Generate a comprehensive backlog of User Stories and Tasks.
+      8. Sprints: Propose initial sprints.
+      9. Weekly Status: Provide a high-level summary headline, accomplishments, focus areas, and synthesized Minutes of Meeting (MoM) from any meeting notes found in the Excel sheets.
       
       Strictly adhere to the JSON responseSchema.`,
       responseMimeType: "application/json",
@@ -267,4 +268,44 @@ export async function analyzeExcelDocument(projectName: string, excelData: Recor
     id: crypto.randomUUID(),
     lastUpdated: new Date().toISOString()
   } as ProjectAssets;
+}
+
+export async function analyzeWBSFromExcel(projectName: string, excelData: Record<string, any[]>): Promise<WBSItem[]> {
+  const content = Object.entries(excelData)
+    .map(([sheetName, rows]) => `Sheet: ${sheetName}\nData: ${JSON.stringify(rows)}`)
+    .join('\n\n');
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-3-flash-preview',
+    contents: `Project Name: ${projectName}\nExcel Data Content:\n${content}`,
+    config: {
+      systemInstruction: `You are a Senior PMO Director and Solution Architect at BSSconnects. 
+      Objective: Analyze the provided Excel data and extract a structured Work Breakdown Structure (WBS).
+      
+      Requirements:
+      1. Identify milestones, components, and their specific subtasks.
+      2. Map every milestone to a Requirement ID (REQ-XXX) if found, or generate logical ones.
+      3. Ensure the output is a flat list of WBS items, where each item has a title and an array of subtasks.
+      4. Group related tasks under logical milestones.
+      
+      Strictly adhere to the JSON responseSchema.`,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: { type: Type.STRING },
+            reqId: { type: Type.STRING },
+            title: { type: Type.STRING },
+            subtasks: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["id", "reqId", "title", "subtasks"]
+        }
+      },
+    },
+  });
+
+  const jsonStr = response.text?.trim() || '[]';
+  return JSON.parse(jsonStr) as WBSItem[];
 }

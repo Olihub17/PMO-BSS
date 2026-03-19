@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Layout from './components/Layout';
-import { generateProjectAssets, analyzeExcelDocument } from './geminiService';
+import { generateProjectAssets, analyzeExcelDocument, analyzeWBSFromExcel } from './geminiService';
 import { ProjectAssets, AssetType, Activity, RiskItem, HLDComponent, LLDComponent } from './types';
 import { WBSView, HLDView, LLDView, RoadmapView, DashboardView, ActivityTableView, RiskLogView, GlobalDashboardView, FolderOpen, BacklogView, ScrumBoardView, ResourceDashboardView, ResourceProjectsView, DependencyView, ProjectResourcesView, WeeklyStatusView } from './components/AssetViews';
 import { Upload, Wand2, FileText, LayoutList, Share2, Download, Loader2, AlertCircle, Calendar, FileType, X, CheckCircle2, LayoutDashboard, Layers, Activity as ActivityIcon, Terminal, TableProperties, ShieldAlert, Rocket, ArrowRight, User, Briefcase, Plus, FileBarChart, Kanban, ListTodo, Link2, Users, LogOut, Lock } from 'lucide-react';
@@ -94,6 +94,20 @@ const App: React.FC = () => {
     } catch (err) {
       console.error(err);
       setError('Login failed.');
+    }
+  };
+
+  const handleWBSAnalysis = async (excelData: Record<string, any[]>) => {
+    if (!currentProjectId) return;
+    setIsProcessing(true);
+    try {
+      const newWbs = await analyzeWBSFromExcel(currentProject.metadata.projectName, excelData);
+      updateCurrentProject({ wbs: newWbs });
+    } catch (error) {
+      console.error('WBS Analysis failed:', error);
+      setError('Failed to analyze WBS from Excel. Please try again.');
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -787,7 +801,15 @@ const App: React.FC = () => {
                     onUpdateBacklog={(items) => updateCurrentProject({ backlog: items })} 
                   />
                 )}
-                {activeTab === 'WBS' && <WBSView items={currentProject.wbs} onUpdate={(items) => updateCurrentProject({ wbs: items })} onDownloadPDF={() => handleExportPDF('WBS')} />}
+                {activeTab === 'WBS' && (
+                  <WBSView 
+                    items={currentProject.wbs} 
+                    onUpdate={(items) => updateCurrentProject({ wbs: items })} 
+                    onDownloadPDF={() => handleExportPDF('WBS')} 
+                    onAIAnalysis={handleWBSAnalysis}
+                    isProcessing={isProcessing}
+                  />
+                )}
                 {activeTab === 'HLD' && <HLDView components={currentProject.hld} onUpdate={(comps) => updateCurrentProject({ hld: comps })} onDownloadPDF={() => handleExportPDF('HLD')} />}
                 {activeTab === 'LLD' && <LLDView components={currentProject.lld} onUpdate={(comps) => updateCurrentProject({ lld: comps })} onDownloadPDF={() => handleExportPDF('LLD')} />}
                 {activeTab === 'ACTIVITIES' && (

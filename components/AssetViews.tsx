@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { WBSItem, HLDComponent, LLDComponent, RoadmapPhase, ProjectAssets, Activity, RiskItem, BacklogItem, Sprint, Milestone, Resource, AssetType, ProjectDependency, WeeklyStatus, MoMEntry } from '../types';
-import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical, FileText, Loader2, Wand2 } from 'lucide-react';
+import { ChevronDown, CheckCircle, Cpu, Calendar, Target, Layers, Box, Terminal, Activity as ActivityIcon, LayoutList, Plus, Trash2, Link2, Clock, ShieldAlert, AlertTriangle, Info, BarChart3, TrendingUp, Briefcase, PieChart, Users, ArrowRight, X, FolderOpen, Rocket, Share2, Globe, ExternalLink, Settings2, RefreshCw, Edit3, Save, CheckCircle2, FileUp, Archive, History, DownloadCloud, Database, Download, Kanban, ListTodo, GripVertical, FileText, Loader2, Wand2, Search, Filter, LayoutGrid, List } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import mammoth from 'mammoth';
 
@@ -304,8 +304,13 @@ export const WeeklyStatusView: React.FC<{
 export const WBSView: React.FC<{ 
   items: WBSItem[], 
   onUpdate: (items: WBSItem[]) => void,
-  onDownloadPDF?: () => void 
-}> = ({ items, onUpdate, onDownloadPDF }) => {
+  onDownloadPDF?: () => void,
+  onAIAnalysis?: (data: Record<string, any[]>) => Promise<void>,
+  isProcessing?: boolean
+}> = ({ items, onUpdate, onDownloadPDF, onAIAnalysis, isProcessing }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const smartFileInputRef = useRef<HTMLInputElement>(null);
+
   const handleCellEdit = (id: string, field: keyof WBSItem, value: any) => {
     onUpdate(items.map(item => item.id === id ? { ...item, [field]: value } : item));
   };
@@ -340,11 +345,84 @@ export const WBSView: React.FC<{
     }));
   };
 
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>, useAI: boolean = false) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const bstr = evt.target?.result;
+      const wb = XLSX.read(bstr, { type: 'binary' });
+      
+      if (useAI && onAIAnalysis) {
+        const allData: Record<string, any[]> = {};
+        wb.SheetNames.forEach(name => {
+          allData[name] = XLSX.utils.sheet_to_json(wb.Sheets[name]);
+        });
+        await onAIAnalysis(allData);
+        return;
+      }
+
+      const wsname = wb.SheetNames[0];
+      const ws = wb.Sheets[wsname];
+      const data: any[] = XLSX.utils.sheet_to_json(ws);
+      
+      const newWbsItems: WBSItem[] = [];
+      let currentParent: WBSItem | null = null;
+
+      data.forEach((row, i) => {
+        const id = String(row.id || row.ID || row['WBS ID'] || '');
+        const title = String(row.title || row.Milestone || row.Component || row.Task || row['Task Name'] || '');
+        const subtask = String(row.subtask || row.Task || row['Subtask'] || '');
+        const reqId = String(row.reqId || row.REQ || row['Requirement ID'] || `REQ-${items.length + newWbsItems.length + 1}`);
+
+        const isSubtask = id.includes('.') || (subtask && !title) || row.parent || row.Parent;
+
+        if (isSubtask && currentParent) {
+          currentParent.subtasks = [...(currentParent.subtasks || []), title || subtask];
+        } else {
+          currentParent = {
+            id: id || `WBS-${items.length + newWbsItems.length + 1}`,
+            reqId: reqId,
+            title: title || subtask || 'Imported Milestone',
+            subtasks: []
+          };
+          newWbsItems.push(currentParent);
+        }
+      });
+
+      onUpdate([...items, ...newWbsItems]);
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-black text-slate-900">Work <span className="text-indigo-600">Breakdown</span></h2>
+        <div className="space-y-1">
+          <h2 className="text-2xl font-black text-slate-900">Work <span className="text-indigo-600">Breakdown</span></h2>
+          <p className="text-slate-500 text-xs">Deconstruct project scope into logical milestones and specific tasks.</p>
+        </div>
         <div className="flex gap-2">
+          <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls" onChange={(e) => handleExcelUpload(e, false)} />
+          <input type="file" ref={smartFileInputRef} className="hidden" accept=".xlsx,.xls" onChange={(e) => handleExcelUpload(e, true)} />
+          
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <FileUp className="w-4 h-4" /> Quick Import
+          </button>
+
+          <button 
+            disabled={isProcessing}
+            onClick={() => smartFileInputRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-50 border border-indigo-100 text-indigo-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-100 transition-all shadow-sm disabled:opacity-50"
+          >
+            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+            Smart AI Import
+          </button>
+
           {onDownloadPDF && (
             <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
               <Download className="w-4 h-4" /> Export PDF
@@ -867,11 +945,11 @@ export const ActivityTableView: React.FC<{
     const reader = new FileReader();
     reader.onload = (evt) => {
       const bstr = evt.target?.result;
-      const wb = XLSX.read(bstr, { type: 'binary' });
+      const wb = XLSX.read(bstr, { type: 'binary', cellDates: true });
       
       const allSheetsData: Record<string, any[]> = {};
       wb.SheetNames.forEach(name => {
-        allSheetsData[name] = XLSX.utils.sheet_to_json(wb.Sheets[name]);
+        allSheetsData[name] = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 0, defval: '' });
       });
 
       if (isSuper && onSuperAnalysis) {
@@ -881,14 +959,24 @@ export const ActivityTableView: React.FC<{
         const ws = wb.Sheets[wsname];
         const data: any[] = XLSX.utils.sheet_to_json(ws);
         
-        const newActivities: Activity[] = data.map((row, i) => ({
-          id: row.id || row.ID || `T-${activities.length + i + 1}`,
-          task: row.task || row.Activity || row.Task || 'Imported Task',
-          startDate: row.startDate || row.Start || new Date().toISOString().split('T')[0],
-          endDate: row.endDate || row.End || new Date().toISOString().split('T')[0],
-          duration: parseInt(row.duration || row.Days || row.Duration) || 1,
-          status: (row.status || row.Status || 'To Do') as any,
-        }));
+        const newActivities: Activity[] = data.map((row, i) => {
+          const formatDate = (val: any) => {
+            if (!val) return new Date().toISOString().split('T')[0];
+            if (val instanceof Date) return val.toISOString().split('T')[0];
+            // Handle strings or numbers
+            const d = new Date(val);
+            return isNaN(d.getTime()) ? new Date().toISOString().split('T')[0] : d.toISOString().split('T')[0];
+          };
+
+          return {
+            id: row.id || row.ID || row['Task ID'] || row['Activity ID'] || `T-${activities.length + i + 1}`,
+            task: row.task || row.Activity || row.Task || row['Task Name'] || row['Activity Name'] || row.Description || 'Imported Task',
+            startDate: formatDate(row.startDate || row.Start || row['Start Date'] || row['Planned Start']),
+            endDate: formatDate(row.endDate || row.End || row['End Date'] || row['Planned End']),
+            duration: parseInt(row.duration || row.Days || row.Duration || row['Duration (Days)']) || 1,
+            status: (row.status || row.Status || row['Task Status'] || 'To Do') as any,
+          };
+        });
         onUpdate([...activities, ...newActivities]);
       }
     };
@@ -1282,6 +1370,9 @@ export const DependencyView: React.FC<{
 }> = ({ assets, onUpdate, onDownloadPDF }) => {
   const dependencies = assets.dependencies || [];
   const [selectedDepId, setSelectedDepId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState<string>('All');
+  const [groupByPhase, setGroupByPhase] = useState(false);
 
   const handleAdd = () => {
     const newDep: ProjectDependency = { 
@@ -1323,14 +1414,34 @@ export const DependencyView: React.FC<{
     }
   };
 
+  const filteredDeps = dependencies.filter(dep => {
+    const matchesSearch = 
+      dep.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      dep.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      assets.activities.find(a => a.id === dep.sourceActivityId)?.task.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      assets.activities.find(a => a.id === dep.targetActivityId)?.task.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = filterStatus === 'All' || dep.status === filterStatus;
+    
+    return matchesSearch && matchesStatus;
+  });
+
+  const groupedDeps = groupByPhase 
+    ? assets.roadmap.reduce((acc, phase) => {
+        const phaseDeps = filteredDeps.filter(d => d.roadmapPhaseName === phase.phaseName);
+        if (phaseDeps.length > 0) acc[phase.phaseName] = phaseDeps;
+        return acc;
+      }, {} as Record<string, ProjectDependency[]>)
+    : { 'All Dependencies': filteredDeps };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="space-y-1">
           <h2 className="text-2xl font-black text-slate-900">Project <span className="text-indigo-600">Dependencies</span></h2>
           <p className="text-slate-500 text-xs">Ahmed, align architectural constraints with the master schedule and roadmap.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {onDownloadPDF && (
             <button onClick={onDownloadPDF} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
               <Download className="w-4 h-4" /> Export PDF
@@ -1345,61 +1456,119 @@ export const DependencyView: React.FC<{
         </div>
       </div>
 
+      {/* Search and Filters */}
+      <div className="bg-slate-50 p-4 rounded-[24px] border border-slate-100 flex flex-col md:flex-row gap-4 items-center">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input 
+            type="text"
+            placeholder="Search dependencies, activities, or IDs..."
+            className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2 w-full md:w-auto">
+          <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-3 py-2">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
+            <select 
+              className="bg-transparent text-xs font-bold text-slate-600 outline-none"
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+            >
+              <option value="All">All Status</option>
+              <option value="Identified">Identified</option>
+              <option value="Resolved">Resolved</option>
+              <option value="At Risk">At Risk</option>
+            </select>
+          </div>
+          <button 
+            onClick={() => setGroupByPhase(!groupByPhase)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${groupByPhase ? 'bg-indigo-600 text-white shadow-md' : 'bg-white border border-slate-200 text-slate-600'}`}
+          >
+            {groupByPhase ? <LayoutGrid className="w-3.5 h-3.5" /> : <List className="w-3.5 h-3.5" />}
+            {groupByPhase ? 'Grouped by Phase' : 'Flat List'}
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          {dependencies.length === 0 ? (
+        <div className="space-y-6">
+          {filteredDeps.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 bg-slate-50 rounded-[32px] border-2 border-dashed border-slate-200">
               <Link2 className="w-12 h-12 text-slate-300 mb-4" />
-              <p className="text-slate-500 font-medium">No dependencies defined yet.</p>
+              <p className="text-slate-500 font-medium">No dependencies found.</p>
             </div>
-          ) : dependencies.map((dep) => (
-            <div 
-              key={dep.id} 
-              onClick={() => setSelectedDepId(dep.id)}
-              className={`bg-white border rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group relative ${selectedDepId === dep.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200'}`}
-            >
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleRemove(dep.id); }}
-                className="absolute top-6 right-6 p-1.5 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+          ) : (Object.entries(groupedDeps) as [string, ProjectDependency[]][]).map(([groupName, deps]) => (
+            <div key={groupName} className="space-y-4">
+              {groupByPhase && (
+                <div className="flex items-center gap-3 px-2">
+                  <div className="h-px flex-1 bg-slate-100"></div>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">{groupName}</span>
+                  <div className="h-px flex-1 bg-slate-100"></div>
+                </div>
+              )}
+              <div className="space-y-4">
+                {deps.map((dep) => (
+                  <div 
+                    key={dep.id} 
+                    onClick={() => setSelectedDepId(dep.id)}
+                    className={`bg-white border rounded-3xl p-6 shadow-sm hover:shadow-md transition-all cursor-pointer group relative ${selectedDepId === dep.id ? 'border-indigo-500 ring-2 ring-indigo-500/10' : 'border-slate-200'}`}
+                  >
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleRemove(dep.id); }}
+                      className="absolute top-6 right-6 p-1.5 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
 
-              <div className="flex items-center gap-3 mb-4">
-                <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${getStatusColor(dep.status)}`}>
-                  {dep.status}
-                </span>
-                <span className="text-[10px] font-mono text-slate-400 font-bold">#{dep.id}</span>
-              </div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${getStatusColor(dep.status)}`}>
+                          {dep.status}
+                        </span>
+                        <span className="text-[10px] font-mono text-slate-400 font-bold">#{dep.id}</span>
+                      </div>
+                      <div className={`text-[10px] font-black uppercase ${getImpactColor(dep.impact)}`}>
+                        {dep.impact} Impact
+                      </div>
+                    </div>
 
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Source Activity</div>
-                  <div className="font-bold text-slate-800 text-sm truncate">
-                    {assets.activities.find(a => a.id === dep.sourceActivityId)?.task || 'Unlinked Activity'}
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-50">
+                      <div className="space-y-1">
+                        <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Source</div>
+                        <div className="font-bold text-slate-800 text-xs line-clamp-2 leading-tight">
+                          {assets.activities.find(a => a.id === dep.sourceActivityId)?.task || 'Unlinked Activity'}
+                        </div>
+                        <div className="text-[9px] font-mono text-indigo-400 font-bold">{dep.sourceActivityId || 'N/A'}</div>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <div className="h-8 w-px bg-slate-200 mb-1"></div>
+                        <ArrowRight className="w-4 h-4 text-indigo-500" />
+                        <div className="h-8 w-px bg-slate-200 mt-1"></div>
+                      </div>
+                      <div className="space-y-1 text-right">
+                        <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Target</div>
+                        <div className="font-bold text-slate-800 text-xs line-clamp-2 leading-tight">
+                          {assets.activities.find(a => a.id === dep.targetActivityId)?.task || 'Unlinked Activity'}
+                        </div>
+                        <div className="text-[9px] font-mono text-indigo-400 font-bold">{dep.targetActivityId || 'N/A'}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 bg-slate-100 rounded-lg">
+                          <Calendar className="w-3 h-3 text-slate-500" />
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{dep.roadmapPhaseName || 'No Phase'}</span>
+                      </div>
+                      <div className="text-[10px] font-bold text-slate-400 italic">
+                        {dep.type} Dependency
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[10px] font-mono text-slate-400">{dep.sourceActivityId || 'No ID'}</div>
-                </div>
-                <div className="shrink-0">
-                  <ArrowRight className="w-4 h-4 text-slate-300" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Target Activity</div>
-                  <div className="font-bold text-slate-800 text-sm truncate">
-                    {assets.activities.find(a => a.id === dep.targetActivityId)?.task || 'Unlinked Activity'}
-                  </div>
-                  <div className="text-[10px] font-mono text-slate-400">{dep.targetActivityId || 'No ID'}</div>
-                </div>
-              </div>
-
-              <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{dep.roadmapPhaseName || 'No Phase'}</span>
-                </div>
-                <div className={`text-[10px] font-black uppercase ${getImpactColor(dep.impact)}`}>
-                  {dep.impact} Impact
-                </div>
+                ))}
               </div>
             </div>
           ))}
