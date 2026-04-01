@@ -29,6 +29,16 @@ const App: React.FC = () => {
   const [authLoading, setAuthLoading] = useState(true);
   const [currentProjectId, setCurrentProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('');
+  const [projectSpace, setProjectSpace] = useState<'R&D' | 'Delivery'>('Delivery');
+  const [prioritizationProcess, setPrioritizationProcess] = useState<'Idea' | 'POC' | 'MVP' | 'Delivery'>('Idea');
+
+  useEffect(() => {
+    if (projectSpace === 'Delivery') {
+      setPrioritizationProcess('Delivery');
+    } else {
+      setPrioritizationProcess('Idea');
+    }
+  }, [projectSpace]);
   const [requirements, setRequirements] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isFileLoading, setIsFileLoading] = useState(false);
@@ -202,6 +212,8 @@ const App: React.FC = () => {
       result.lld = result.lld.map(l => ({ ...l, id: crypto.randomUUID() }));
       result.ownerId = user.uid;
       result.assignedEmails = [];
+      result.metadata.projectSpace = projectSpace;
+      result.metadata.prioritizationProcess = projectSpace === 'R&D' ? prioritizationProcess : 'Delivery';
       
       await setDoc(doc(db, 'projects', result.id), result);
       setCurrentProjectId(result.id);
@@ -660,7 +672,7 @@ const App: React.FC = () => {
                 <p className="text-slate-500 max-w-md mx-auto">Ahmed, enter the project identity to begin architectural deconstruction.</p>
              </div>
              
-             <div className="bg-white p-3 rounded-3xl shadow-xl border border-slate-200 flex flex-col md:flex-row gap-3 w-full max-w-lg">
+             <div className="bg-white p-3 rounded-3xl shadow-xl border border-slate-200 flex flex-col gap-3 w-full max-w-lg">
                 <input 
                   type="text" 
                   placeholder="Project Identity (e.g. OCS Migration)" 
@@ -669,6 +681,39 @@ const App: React.FC = () => {
                   onChange={(e) => setProjectName(e.target.value)}
                   autoFocus
                 />
+                
+                <div className="flex gap-2 px-3 pb-2">
+                  <button 
+                    onClick={() => setProjectSpace('R&D')}
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${projectSpace === 'R&D' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
+                  >
+                    1-R&D Projects
+                  </button>
+                  <button 
+                    onClick={() => setProjectSpace('Delivery')}
+                    className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${projectSpace === 'Delivery' ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
+                  >
+                    2-Delivery Projects
+                  </button>
+                </div>
+
+                {projectSpace === 'R&D' && (
+                  <div className="px-3 pb-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block text-left ml-1">Prioritization Process</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Idea', 'POC', 'MVP', 'Delivery'].map((stage) => (
+                        <button
+                          key={stage}
+                          onClick={() => setPrioritizationProcess(stage as any)}
+                          className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${prioritizationProcess === stage ? 'bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-100' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
+                        >
+                          {stage}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <button 
                   onClick={() => projectName && setStep('REQUIREMENTS')}
                   disabled={!projectName}

@@ -610,6 +610,8 @@ export const GlobalDashboardView: React.FC<{
   viewMode?: 'dashboard' | 'projects'
 }> = ({ projects, onOpenProject, onDeleteProject, onToggleArchive, onNewProject, viewMode = 'dashboard' }) => {
   const activeProjects = projects.filter(p => !p.isArchived);
+  const rdProjects = activeProjects.filter(p => p.metadata.projectSpace === 'R&D');
+  const deliveryProjects = activeProjects.filter(p => p.metadata.projectSpace === 'Delivery' || !p.metadata.projectSpace);
   const archivedProjects = projects.filter(p => p.isArchived);
   
   const totalProjects = projects.length;
@@ -677,16 +679,45 @@ export const GlobalDashboardView: React.FC<{
 
       <div className={`grid grid-cols-1 ${viewMode === 'dashboard' ? 'lg:grid-cols-3' : ''} gap-8`}>
         <div className={`${viewMode === 'dashboard' ? 'lg:col-span-2' : ''} space-y-8`}>
+          {/* R&D Projects Section */}
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
              <div className="flex justify-between items-center mb-6">
-                <h3 className="font-bold text-slate-800 text-xl flex items-center gap-2"><FolderOpen className="w-6 h-6 text-indigo-600" />Active Projects</h3>
+                <h3 className="font-bold text-slate-800 text-xl flex items-center gap-2">
+                  <div className="p-2 bg-amber-50 text-amber-600 rounded-lg"><Rocket className="w-5 h-5" /></div>
+                  1-R&D (Research & Development) Projects
+                </h3>
+                <span className="bg-amber-50 text-amber-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-amber-100">
+                  {rdProjects.length} Projects
+                </span>
              </div>
              <div className="space-y-4">
-                {activeProjects.length === 0 ? (
+                {rdProjects.length === 0 ? (
                   <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                    <p className="text-slate-400 font-medium">No active projects found. Start by initializing a new one.</p>
+                    <p className="text-slate-400 font-medium">No R&D projects found.</p>
                   </div>
-                ) : activeProjects.map(p => (
+                ) : rdProjects.map(p => (
+                  <ProjectCard key={p.id} project={p} onClick={() => onOpenProject(p.id)} onDelete={onDeleteProject} onToggleArchive={onToggleArchive} />
+                ))}
+             </div>
+          </div>
+
+          {/* Delivery Projects Section */}
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+             <div className="flex justify-between items-center mb-6">
+                <h3 className="font-bold text-slate-800 text-xl flex items-center gap-2">
+                  <div className="p-2 bg-blue-50 text-blue-600 rounded-lg"><Briefcase className="w-5 h-5" /></div>
+                  2-Delivery Projects
+                </h3>
+                <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100">
+                  {deliveryProjects.length} Projects
+                </span>
+             </div>
+             <div className="space-y-4">
+                {deliveryProjects.length === 0 ? (
+                  <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-slate-400 font-medium">No delivery projects found.</p>
+                  </div>
+                ) : deliveryProjects.map(p => (
                   <ProjectCard key={p.id} project={p} onClick={() => onOpenProject(p.id)} onDelete={onDeleteProject} onToggleArchive={onToggleArchive} />
                 ))}
              </div>
@@ -731,7 +762,19 @@ const ProjectCard = ({ project, onClick, onDelete, onToggleArchive, isArchive = 
           <Rocket className="w-5 h-5" />
         </div>
         <div>
-          <h4 className="font-bold text-slate-800">{project.metadata.projectName}</h4>
+          <div className="flex items-center gap-2">
+            <h4 className="font-bold text-slate-800">{project.metadata.projectName}</h4>
+            {project.metadata.projectSpace && (
+              <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase ${project.metadata.projectSpace === 'R&D' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                {project.metadata.projectSpace}
+              </span>
+            )}
+            {project.metadata.projectSpace === 'R&D' && project.metadata.prioritizationProcess && (
+              <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase bg-slate-100 text-slate-600 border border-slate-200">
+                {project.metadata.prioritizationProcess}
+              </span>
+            )}
+          </div>
           <span className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Modified {new Date(project.lastUpdated).toLocaleDateString()}</span>
         </div>
       </div>

@@ -24,7 +24,9 @@
             "projectName": { "type": "string" },
             "preparedBy": { "type": "string" },
             "date": { "type": "string" },
-            "organization": { "type": "string" }
+            "organization": { "type": "string" },
+            "projectSpace": { "type": "string", "enum": ["R&D", "Delivery"] },
+            "prioritizationProcess": { "type": "string", "enum": ["Idea", "POC", "MVP", "Delivery"] }
           }
         },
         "summary": { "type": "string" },

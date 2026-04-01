@@ -123,6 +123,8 @@ export interface ProjectAssets {
     preparedBy: string;
     date: string;
     organization: string;
+    projectSpace?: 'R&D' | 'Delivery';
+    prioritizationProcess?: 'Idea' | 'POC' | 'MVP' | 'Delivery';
   };
   summary: string;
   wbs: WBSItem[];
